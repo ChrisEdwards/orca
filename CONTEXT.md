@@ -43,6 +43,10 @@ The cmux workspace the orchestrator was fired from. New worker tabs are added he
 **Surface**
 A single terminal (or markdown or browser view) inside a pane. A worker occupies one terminal surface. This is the thing orca writes to and reads from.
 
+**Surface descriptor**
+A human description used to identify an existing surface when the surface UUID is not supplied directly.
+_Avoid_ pane descriptor, target pane
+
 **Tab**
 The human-facing label for a surface within a pane. Adding a worker means adding a tab to the shared workspace, and "spawn a pane" in casual terms means this.
 
@@ -88,3 +92,7 @@ The spawn behavior where orca verifies the worker came up and reached the right 
 
 **Fork**
 Create a new conversation by branching an existing conversation, then open that branch in its own tab. Unlike spawn, a fork preserves prior conversation history instead of starting from a fresh brief.
+
+**Message**
+Deliver follow-up text to an existing agent instance in its current surface. Unlike spawn or fork, message does not create a new surface or conversation.
+_Avoid_ prompt, brief

@@ -40,6 +40,7 @@ document it as a prerequisite.
 ## Learnings
 
 - The `orca-cmux.sh` copy-parity test only guarantees the shared cmux seam stays byte-for-byte identical. `orca-spawn.sh` and `orca-fork.sh` are not copied files; shared user-facing behavior across them needs explicit behavior tests in both suites.
+- `br create` does not accept `--acceptance`; create the bead first, then use `br update <id> --acceptance-criteria="$criteria"` for acceptance criteria.
 
 <!-- br-agent-instructions-v1 -->
 
