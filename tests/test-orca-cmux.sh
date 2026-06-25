@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Unit tests for skills/orca-agent/scripts/orca-cmux.sh.
+# Unit tests for skills/orca-spawn/scripts/orca-cmux.sh.
 #
 # These tests assert COMMAND CONSTRUCTION: orca-cmux must emit the right cmux
 # argv for given inputs, without ever talking to a real cmux. We inject a fake
@@ -11,7 +11,7 @@ set -u
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
-ORCA_CMUX="$REPO_ROOT/skills/orca-agent/scripts/orca-cmux.sh"
+ORCA_CMUX="$REPO_ROOT/skills/orca-spawn/scripts/orca-cmux.sh"
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT

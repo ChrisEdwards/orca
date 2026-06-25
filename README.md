@@ -5,7 +5,7 @@ agent instances in cmux tabs.
 
 The plugin includes three skills:
 
-- `orca-agent` launches one worker for one task, waits for the worker to reach
+- `orca-spawn` launches one worker for one task, waits for the worker to reach
   its ready state, gives it a self-contained brief, and reports the resulting
   cmux surface.
 - `orca-fork` forks an existing Codex or Claude Code conversation into a new
@@ -40,7 +40,7 @@ Orca itself. Plugin installation uses `.codex-plugin/plugin.json`, which
 packages every skill under `skills/`.
 
 Each skill must remain self-contained. Runtime files used by a skill belong
-inside that skill directory, such as `skills/orca-agent/scripts/`.
+inside that skill directory, such as `skills/orca-spawn/scripts/`.
 
 ## Validate Packaging
 
@@ -101,7 +101,7 @@ claude --plugin-dir . --print "List available Orca skills."
 ```
 
 Claude Code namespaces plugin skills by plugin name. The current skills are
-available as `/orca:orca-agent`, `/orca:orca-fork`, and `/orca:orca-msg` after
+available as `/orca:orca-spawn`, `/orca:orca-fork`, and `/orca:orca-msg` after
 the plugin is installed or loaded.
 
 Validate the Claude plugin and marketplace manifests:

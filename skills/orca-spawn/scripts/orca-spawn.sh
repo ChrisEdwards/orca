@@ -37,7 +37,7 @@ BIN_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ORCA_CMUX="$BIN_DIR/orca-cmux.sh"
 ORCA_ADAPTER="$BIN_DIR/orca-adapter.sh"
 
-# shellcheck source=skills/orca-agent/scripts/orca-trust-prompt.sh
+# shellcheck source=skills/orca-spawn/scripts/orca-trust-prompt.sh
 . "$BIN_DIR/orca-trust-prompt.sh"
 
 export CMUX_BIN=${CMUX_BIN:-cmux}

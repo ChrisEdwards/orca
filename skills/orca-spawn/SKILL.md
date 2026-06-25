@@ -1,9 +1,9 @@
 ---
-name: orca-agent
+name: orca-spawn
 description: Spawn one AI coding worker (Claude Code or Codex) in a new cmux tab for a single ad-hoc task, then confirm it came up, reached the right mode, and received its brief (fire and confirm). Use when the user asks to spawn, launch, kick off, or hand off a Claude or Codex worker on a task in a repo, run a one-off task in its own tab, or start an agent without defining a full workflow.
 ---
 
-# orca-agent
+# orca-spawn
 
 Spawn one worker for one task, confirm it took, and report back.
 

@@ -9,7 +9,7 @@ Let the human tell their Claude Code orchestrator session "spawn a Claude (or Co
 ## Scope
 
 In scope
-- A thin `orca-agent` skill the orchestrator invokes by conversation.
+- A thin `orca-spawn` skill the orchestrator invokes by conversation.
 - A small cmux-interface helper script wrapping the primitives orca needs, all UUID-based.
 - An `orca-spawn` routine that runs launch, readiness, mode, brief, and confirm.
 - Two inline adapters, Claude Code and Codex.
@@ -55,9 +55,9 @@ Two adapters, inline as a per-agent function or case block for now, extractable 
 ## Components
 
 - **cmux-interface helper script.** Wraps create-tab, send, send-key, read-screen, close, and list. Accepts and returns UUIDs. This is the seam a future tmux backend would replace.
-- **orca-spawn routine.** Runs the spawn sequence above using the interface helper and the adapters. Owns the brief file and `.gitignore` handling. The implementation lives under `skills/orca-agent/scripts/` so the skill package is self-contained.
+- **orca-spawn routine.** Runs the spawn sequence above using the interface helper and the adapters. Owns the brief file and `.gitignore` handling. The implementation lives under `skills/orca-spawn/scripts/` so the skill package is self-contained.
 - **Inline adapters.** Claude and Codex definitions as described.
-- **orca-agent skill.** The thin conversational surface. The orchestrator invokes it with an agent type, a task, and an optional cwd, and it calls the bundled `scripts/orca-spawn.sh`.
+- **orca-spawn skill.** The thin conversational surface. The orchestrator invokes it with an agent type, a task, and an optional cwd, and it calls the bundled `scripts/orca-spawn.sh`.
 
 ## Return contract
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Unit tests for skills/orca-agent/scripts/orca-adapter.sh.
+# Unit tests for skills/orca-spawn/scripts/orca-adapter.sh.
 #
 # Adapters are pure configuration: the one place that knows agent-specific
 # details (launch command, readiness marker, optional mode step). These tests
@@ -10,7 +10,7 @@ set -u
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
-ADAPTER="$REPO_ROOT/skills/orca-agent/scripts/orca-adapter.sh"
+ADAPTER="$REPO_ROOT/skills/orca-spawn/scripts/orca-adapter.sh"
 
 PASS=0
 FAIL=0

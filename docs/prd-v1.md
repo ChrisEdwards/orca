@@ -89,7 +89,7 @@ Initial adapters: Claude Code, Codex.
 
 ### Module 3: Agent Lifecycle Skill (Layer 1)
 
-A Claude Code skill (`orca-agent`) that exposes agent management primitives to the orchestrator session.
+A Claude Code skill (`orca-spawn`) that exposes agent management primitives to the orchestrator session.
 
 - Spawn an agent of a given type in a cmux pane, pointed at a working directory, with an optional brief. Run the adapter's `post_launch` sequence (e.g., Shift+Tab cycling for Claude Code) and verify the expected mode before sending the brief.
 - Monitor the agent by reading terminal output and/or listening for cmux notifications.
