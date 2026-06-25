@@ -42,6 +42,7 @@ TAB=""
 CWD=""
 PROMPT=""
 PROMPT_SENT=false
+ORIGIN_SURFACE=""
 
 emit_known() {
   [[ -n "$PROVIDER" ]] && printf 'provider=%s\n' "$PROVIDER"
@@ -114,6 +115,25 @@ read_fork_screen() {
     fork_fail "failed to read fork screen: $out"
   fi
   printf '%s\n' "$out"
+}
+
+resolve_origin_surface() {
+  local origin
+  origin=$(jq -r '.caller.surface_id // .surface_id // empty' <<<"$identify" 2>/dev/null)
+  if [[ "$origin" =~ $UUID_RE ]]; then
+    ORIGIN_SURFACE=$origin
+  fi
+}
+
+append_parent_footer() {
+  local message=$1
+  if [[ -n "$ORIGIN_SURFACE" ]]; then
+    printf '%s\n\n---\nFrom the parent agent at surface %s.\nTo reply to the parent, use the orca-msg skill targeting that surface if needed.' \
+      "$message" "$ORIGIN_SURFACE"
+  else
+    printf '%s\n\n---\nFrom the parent agent; the parent surface was not available.\nTo reply to the parent, ask the human for a target surface_id and use the orca-msg skill if needed.' \
+      "$message"
+  fi
 }
 
 codex_thread_id=""; claude_session_id=""; title=""
@@ -206,15 +226,20 @@ TAB=${TAB:0:48}
 TAB=${TAB%-}
 [[ -n "$TAB" ]] || TAB="fork-$PROVIDER"
 
-launch=$("$ORCA_ADAPTER" "$PROVIDER" launch "$SOURCE_ID" "$PROMPT" 2>/dev/null) \
-  || die "could not build fork command for $PROVIDER"
-ready_marker=$("$ORCA_ADAPTER" "$PROVIDER" ready-marker 2>/dev/null) \
-  || die "could not resolve readiness marker for $PROVIDER"
-
 identify=$(CMUX_QUIET=1 "$CMUX_BIN" identify --json --id-format both 2>/dev/null) \
   || die "cannot reach cmux (is it running, and are we inside a cmux terminal?)"
 ws=$(jq -r '.caller.workspace_id // empty' <<<"$identify" 2>/dev/null)
 [[ -n "$ws" ]] || die "could not resolve the calling workspace UUID from cmux identify"
+resolve_origin_surface
+
+if [[ -n "$PROMPT" ]]; then
+  PROMPT=$(append_parent_footer "$PROMPT")
+fi
+
+launch=$("$ORCA_ADAPTER" "$PROVIDER" launch "$SOURCE_ID" "$PROMPT" 2>/dev/null) \
+  || die "could not build fork command for $PROVIDER"
+ready_marker=$("$ORCA_ADAPTER" "$PROVIDER" ready-marker 2>/dev/null) \
+  || die "could not resolve readiness marker for $PROVIDER"
 
 CWD=$(CMUX_QUIET=1 "$CMUX_BIN" list-workspaces --json --id-format both 2>/dev/null \
   | jq -r --arg ws "$ws" '.workspaces[]? | select(.id==$ws) | .current_directory // empty' 2>/dev/null)

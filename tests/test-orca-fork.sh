@@ -18,6 +18,7 @@ STATE="$TMP/state"
 FAKE="$TMP/cmux"
 
 SURFACE="BE7E2B29-66BA-44B4-BE66-73B85C85C7F3"
+ORIGIN_SURFACE="8AA280A2-FEB8-4733-B750-2681FA2C2985"
 WS="90D8E74A-E0EE-4FCB-8F7C-105574F46F01"
 CODEX_ID="019EFC9B-9880-7810-A352-D6427E876693"
 CLAUDE_ID="3B877D88-C1EC-44FC-8987-AEE00A86CD12"
@@ -34,7 +35,7 @@ trusted="$FAKE_STATE/trusted"
 case "$sub" in
   identify)
     [[ "${FAKE_SCENARIO:-}" == cmux-down ]] && { echo "cmux: daemon not running" >&2; exit 1; }
-    printf '{ "caller": { "workspace_id": "%s", "surface_id": "ORCH-SURFACE-UUID" } }\n' "$FAKE_WS"
+    printf '{ "caller": { "workspace_id": "%s", "surface_id": "%s" } }\n' "$FAKE_WS" "$FAKE_ORIGIN_SURFACE"
     ;;
   list-workspaces|workspace)
     printf '{ "workspaces": [ { "id": "%s", "ref": "workspace:9", "current_directory": "%s" } ] }\n' "$FAKE_WS" "$FAKE_CWD"
@@ -132,6 +133,7 @@ fork_run() {
   # can never leak into the script under test.
   LAST_OUT=$(CMUX_BIN="$FAKE" FAKE_CALLS="$CALLS" FAKE_STATE="$STATE" \
     FAKE_SURFACE="$SURFACE" FAKE_WS="$WS" FAKE_CWD="$DEFAULT_CWD" \
+    FAKE_ORIGIN_SURFACE="$ORIGIN_SURFACE" \
     FAKE_SCENARIO="$SCENARIO" ORCA_READY_POLLS="$POLLS" ORCA_POLL_INTERVAL=0 \
     CODEX_THREAD_ID="$AUTO_CODEX" CLAUDE_CODE_SESSION_ID="$AUTO_CLAUDE" \
     "$FORK" "$@" 2>"$errfile")
@@ -149,6 +151,10 @@ mentions_err() { grep -qF -- "$1" <<<"$LAST_ERR"; }
 rc_is() { [[ "$LAST_RC" -eq "$1" ]]; }
 rc_not() { [[ "$LAST_RC" -ne "$1" ]]; }
 eq() { [[ "$1" == "$2" ]]; }
+
+with_parent_footer() {
+  printf '%s\n\n---\nFrom the parent agent at surface %s.\nTo reply to the parent, use the orca-msg skill targeting that surface if needed.' "$1" "$ORIGIN_SURFACE"
+}
 
 # === Codex auto source, open-only =========================================
 WORK="$TMP/repo-codex"; mkdir -p "$WORK"
@@ -173,7 +179,7 @@ WORK2="$TMP/repo-codex-explicit"; mkdir -p "$WORK2"
 DEFAULT_CWD="$WORK2"; SCENARIO=codex; AUTO_CODEX=""
 fork_run --codex-thread-id "$CODEX_ID" --prompt "Investigate auth failures" --title "Auth Fork"
 
-quoted_prompt=$(printf '%q' "Investigate auth failures")
+quoted_prompt=$(printf '%q' "$(with_parent_footer "Investigate auth failures")")
 ok  "codex explicit: exits 0"              rc_is 0
 ok  "codex explicit: prompt sent"          eq "$(field prompt_sent)" true
 ok  "codex explicit: title slug used"      eq "$(field tab)" "auth-fork"
@@ -247,7 +253,7 @@ no  "both auto: no tab created"              called_subcommand new-surface
 PROMPT_FILE="$TMP/prompt.md"
 printf 'line one\nline two\n' > "$PROMPT_FILE"
 multiline=$(cat "$PROMPT_FILE")
-quoted_multiline=$(printf '%q' "$multiline")
+quoted_multiline=$(printf '%q' "$(with_parent_footer "$multiline")")
 DEFAULT_CWD="$WORK2"; SCENARIO=codex; AUTO_CODEX=""
 fork_run --codex-thread-id "$CODEX_ID" --prompt-file "$PROMPT_FILE"
 ok  "prompt file: exits 0"                  rc_is 0

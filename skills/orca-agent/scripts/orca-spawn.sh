@@ -53,6 +53,7 @@ TASK_ID=""
 SURFACE=""
 CWD=""
 BRIEF_REL=""
+ORIGIN_SURFACE=""
 
 die() {
   local msg=$1
@@ -91,6 +92,25 @@ read_worker_screen() {
     spawn_fail "failed to read worker screen: $out"
   fi
   printf '%s\n' "$out"
+}
+
+resolve_origin_surface() {
+  local origin
+  origin=$(jq -r '.caller.surface_id // .surface_id // empty' <<<"$identify" 2>/dev/null)
+  if [[ "$origin" =~ ^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$ ]]; then
+    ORIGIN_SURFACE=$origin
+  fi
+}
+
+append_parent_footer() {
+  local message=$1
+  if [[ -n "$ORIGIN_SURFACE" ]]; then
+    printf '%s\n\n---\nFrom the parent agent at surface %s.\nTo reply to the parent, use the orca-msg skill targeting that surface if needed.' \
+      "$message" "$ORIGIN_SURFACE"
+  else
+    printf '%s\n\n---\nFrom the parent agent; the parent surface was not available.\nTo reply to the parent, ask the human for a target surface_id and use the orca-msg skill if needed.' \
+      "$message"
+  fi
 }
 
 # Fail after the worker tab exists: leave it open, name the surface, exit 1.
@@ -146,6 +166,7 @@ identify=$(CMUX_QUIET=1 "$CMUX_BIN" identify --json --id-format both 2>/dev/null
   || die "cannot reach cmux (is it running, and are we inside a cmux terminal?)"
 ws=$(jq -r '.caller.workspace_id // empty' <<<"$identify" 2>/dev/null)
 [[ -n "$ws" ]] || die "could not resolve the calling workspace UUID from cmux identify"
+resolve_origin_surface
 
 if [[ -n "$cwd_override" ]]; then
   CWD=$cwd_override
@@ -246,8 +267,8 @@ if [[ "$mode" == cycle ]]; then
 fi
 
 # --- 8. deliver the brief by pointer ---------------------------------------
-"$ORCA_CMUX" send --surface "$SURFACE" \
-  "Read $BRIEF_REL and carry out the task it describes." >/dev/null \
+delivery=$(append_parent_footer "Read $BRIEF_REL and carry out the task it describes.")
+"$ORCA_CMUX" send --surface "$SURFACE" "$delivery" >/dev/null \
   || spawn_fail "failed to deliver the brief"
 "$ORCA_CMUX" send-key --surface "$SURFACE" enter >/dev/null \
   || spawn_fail "failed to send enter after the brief"

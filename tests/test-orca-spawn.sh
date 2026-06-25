@@ -23,6 +23,7 @@ STATE="$TMP/state"
 FAKE="$TMP/cmux"
 
 SURFACE="BE7E2B29-66BA-44B4-BE66-73B85C85C7F3"
+ORIGIN_SURFACE="8AA280A2-FEB8-4733-B750-2681FA2C2985"
 WS="90D8E74A-E0EE-4FCB-8F7C-105574F46F01"
 
 # --- stateful fake cmux ----------------------------------------------------
@@ -42,7 +43,7 @@ kc=0; [[ -f "$keyfile" ]] && kc=$(cat "$keyfile")
 case "$sub" in
   identify)
     [[ "${FAKE_SCENARIO:-}" == cmux-down ]] && { echo "cmux: daemon not running" >&2; exit 1; }
-    printf '{ "caller": { "workspace_id": "%s", "surface_id": "ORCH-SURFACE-UUID" } }\n' "$FAKE_WS"
+    printf '{ "caller": { "workspace_id": "%s", "surface_id": "%s" } }\n' "$FAKE_WS" "$FAKE_ORIGIN_SURFACE"
     ;;
   list-workspaces|workspace)
     printf '{ "workspaces": [ { "id": "%s", "ref": "workspace:9", "current_directory": "%s" } ] }\n' "$FAKE_WS" "$FAKE_CWD"
@@ -155,6 +156,7 @@ spawn() {
   local errfile="$TMP/stderr"
   LAST_OUT=$(CMUX_BIN="$FAKE" FAKE_CALLS="$CALLS" FAKE_STATE="$STATE" \
     FAKE_SURFACE="$SURFACE" FAKE_WS="$WS" FAKE_CWD="$DEFAULT_CWD" \
+    FAKE_ORIGIN_SURFACE="$ORIGIN_SURFACE" \
     FAKE_SCENARIO="$SCENARIO" \
     ORCA_READY_POLLS="$POLLS" ORCA_POLL_INTERVAL=0 ORCA_MODE_INTERVAL=0 \
     "$SPAWN" "$@" 2>"$errfile")
@@ -174,12 +176,17 @@ rc_is() { [[ "$LAST_RC" -eq "$1" ]]; }
 rc_not() { [[ "$LAST_RC" -ne "$1" ]]; }
 eq() { [[ "$1" == "$2" ]]; }
 
+with_parent_footer() {
+  printf '%s\n\n---\nFrom the parent agent at surface %s.\nTo reply to the parent, use the orca-msg skill targeting that surface if needed.' "$1" "$ORIGIN_SURFACE"
+}
+
 spawn_must_finish() {
   local timeout=$1; shift
   local out="$TMP/timeout.out" err="$TMP/timeout.err" done="$TMP/timeout.done"
   rm -f "$out" "$err" "$done"
   CMUX_BIN="$FAKE" FAKE_CALLS="$CALLS" FAKE_STATE="$STATE" \
     FAKE_SURFACE="$SURFACE" FAKE_WS="$WS" FAKE_CWD="$DEFAULT_CWD" \
+    FAKE_ORIGIN_SURFACE="$ORIGIN_SURFACE" \
     FAKE_SCENARIO="$SCENARIO" \
     ORCA_READY_POLLS="$POLLS" ORCA_POLL_INTERVAL=0 ORCA_MODE_INTERVAL=0 \
     "$SPAWN" "$@" >"$out" 2>"$err" &
@@ -211,7 +218,7 @@ ok  "claude: task id is a kebab slug"      eq "$(field task_id)" "fix-the-login-
 ok  "claude: tab named from task id"       eq "$(field tab)" "fix-the-login-bug"
 ok  "claude: cycles shift+tab to auto (3)" eq "$(count_shift_tabs)" 3
 ok  "claude: delivers pointer brief" \
-      calls_have "Read .orca/briefs/fix-the-login-bug.md and carry out the task it describes."
+      calls_have "$(with_parent_footer "Read .orca/briefs/fix-the-login-bug.md and carry out the task it describes.")"
 ok  "claude: create-tab sets the worker cwd" calls_have $'--working-directory\t'"$WORK"
 ok  "claude: launch sends only the agent command" \
       calls_have_line $'send\t--surface\t'"$SURFACE"$'\tclaude'
@@ -233,7 +240,7 @@ ok  "claude trust: answered yes"           calls_have_line $'send\t--surface\t'"
 ok  "claude trust: submitted answer"       eq "$(count_enter_keys)" 3
 ok  "claude trust: reaches auto mode"      eq "$(count_shift_tabs)" 3
 ok  "claude trust: delivers pointer brief" \
-      calls_have "Read .orca/briefs/trust-this-repo.md and carry out the task it describes."
+      calls_have "$(with_parent_footer "Read .orca/briefs/trust-this-repo.md and carry out the task it describes.")"
 
 # === Codex happy path ======================================================
 WORK2="$TMP/repo-codex"; mkdir -p "$WORK2"
@@ -244,7 +251,7 @@ ok  "codex: exits 0"                    rc_is 0
 ok  "codex: returns the surface UUID"   eq "$(field surface)" "$SURFACE"
 ok  "codex: no mode step (0 shift+tab)" eq "$(count_shift_tabs)" 0
 ok  "codex: delivers pointer brief" \
-      calls_have "Read .orca/briefs/add-unit-tests.md and carry out the task it describes."
+      calls_have "$(with_parent_footer "Read .orca/briefs/add-unit-tests.md and carry out the task it describes.")"
 ok  "codex: launch sends only codex -p yolo" \
       calls_have_line $'send\t--surface\t'"$SURFACE"$'\tcodex -p yolo'
 ok  "codex: brief file written"         test -f "$WORK2/.orca/briefs/add-unit-tests.md"
@@ -260,7 +267,7 @@ ok  "codex trust: answered yes"           calls_have_line $'send\t--surface\t'"$
 ok  "codex trust: submitted answer"       eq "$(count_enter_keys)" 3
 ok  "codex trust: no mode step"           eq "$(count_shift_tabs)" 0
 ok  "codex trust: delivers pointer brief" \
-      calls_have "Read .orca/briefs/trust-codex-repo.md and carry out the task it describes."
+      calls_have "$(with_parent_footer "Read .orca/briefs/trust-codex-repo.md and carry out the task it describes.")"
 
 # === gitignore is not duplicated when already present ======================
 WORK3="$TMP/repo-gi"; mkdir -p "$WORK3"

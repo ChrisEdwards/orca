@@ -12,6 +12,10 @@ _Avoid_ controller, master, supervisor, driver
 A task-bearing agent instance launched by the orchestrator in its own tab to carry out one task.
 _Avoid_ sub-agent, child, bare "agent" when an instance is meant
 
+**Parent**
+The agent instance that spawned or forked another agent instance and is the intended reply target for that parent-child relationship.
+_Avoid_ originator, caller, source agent
+
 ## Agents
 
 **Agent type**
