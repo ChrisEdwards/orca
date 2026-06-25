@@ -1,7 +1,7 @@
 {
   "name": "orca",
   "displayName": "Orca",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Spawn, fork, or message Claude Code and Codex agent instances in cmux tabs.",
   "author": {
     "name": "Chris Edwards",
