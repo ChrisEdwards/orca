@@ -25,6 +25,9 @@ BIN_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ORCA_CMUX="$BIN_DIR/orca-cmux.sh"
 ORCA_ADAPTER="$BIN_DIR/orca-fork-adapter.sh"
 
+# shellcheck source=skills/orca-fork/scripts/orca-trust-prompt.sh
+. "$BIN_DIR/orca-trust-prompt.sh"
+
 export CMUX_BIN=${CMUX_BIN:-cmux}
 
 ORCA_READY_POLLS=${ORCA_READY_POLLS:-30}
@@ -111,20 +114,6 @@ read_fork_screen() {
     fork_fail "failed to read fork screen: $out"
   fi
   printf '%s\n' "$out"
-}
-
-maybe_accept_trust_prompt() {
-  local screen=$1
-  if (grep -qF -- "Is this a project you trust?" <<<"$screen" \
-      || grep -qF -- "Do you trust the contents of this directory?" <<<"$screen") \
-    && grep -qiE -- '1[.)]?[[:space:]]+Yes' <<<"$screen"; then
-    "$ORCA_CMUX" send --surface "$SURFACE" "1" >/dev/null \
-      || fork_fail "failed to answer the trust prompt"
-    "$ORCA_CMUX" send-key --surface "$SURFACE" enter >/dev/null \
-      || fork_fail "failed to submit the trust prompt answer"
-    return 0
-  fi
-  return 1
 }
 
 codex_thread_id=""; claude_session_id=""; title=""
@@ -246,9 +235,17 @@ SURFACE=$("$ORCA_CMUX" create-tab --workspace "$ws" --cwd "$CWD" 2>/dev/null) \
 ready=0
 for ((p = 0; p < ORCA_READY_POLLS; p++)); do
   screen=$(read_fork_screen)
-  if maybe_accept_trust_prompt "$screen"; then
+  if orca_maybe_accept_trust_prompt "$screen" "$SURFACE"; then
     sleep "$ORCA_POLL_INTERVAL"
     continue
+  else
+    trust_rc=$?
+    case "$trust_rc" in
+      1) ;;
+      2) fork_fail "failed to answer the trust prompt" ;;
+      3) fork_fail "failed to submit the trust prompt answer" ;;
+      *) fork_fail "failed to handle the trust prompt" ;;
+    esac
   fi
   if is_ready "$screen"; then ready=1; break; fi
   sleep "$ORCA_POLL_INTERVAL"

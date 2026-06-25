@@ -37,6 +37,9 @@ BIN_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ORCA_CMUX="$BIN_DIR/orca-cmux.sh"
 ORCA_ADAPTER="$BIN_DIR/orca-adapter.sh"
 
+# shellcheck source=skills/orca-agent/scripts/orca-trust-prompt.sh
+. "$BIN_DIR/orca-trust-prompt.sh"
+
 export CMUX_BIN=${CMUX_BIN:-cmux}
 
 # Poll/cycle pacing. Counts not wall-clock, so tests are deterministic.
@@ -88,20 +91,6 @@ read_worker_screen() {
     spawn_fail "failed to read worker screen: $out"
   fi
   printf '%s\n' "$out"
-}
-
-maybe_accept_trust_prompt() {
-  local screen=$1
-  if (grep -qF -- "Is this a project you trust?" <<<"$screen" \
-      || grep -qF -- "Do you trust the contents of this directory?" <<<"$screen") \
-    && grep -qiE -- '1[.)]?[[:space:]]+Yes' <<<"$screen"; then
-    "$ORCA_CMUX" send --surface "$SURFACE" "1" >/dev/null \
-      || spawn_fail "failed to answer the trust prompt"
-    "$ORCA_CMUX" send-key --surface "$SURFACE" enter >/dev/null \
-      || spawn_fail "failed to submit the trust prompt answer"
-    return 0
-  fi
-  return 1
 }
 
 # Fail after the worker tab exists: leave it open, name the surface, exit 1.
@@ -220,9 +209,17 @@ SURFACE=$("$ORCA_CMUX" create-tab --workspace "$ws" --cwd "$CWD" 2>/dev/null) \
 ready=0
 for ((p = 0; p < ORCA_READY_POLLS; p++)); do
   screen=$(read_worker_screen)
-  if maybe_accept_trust_prompt "$screen"; then
+  if orca_maybe_accept_trust_prompt "$screen" "$SURFACE"; then
     sleep "$ORCA_POLL_INTERVAL"
     continue
+  else
+    trust_rc=$?
+    case "$trust_rc" in
+      1) ;;
+      2) spawn_fail "failed to answer the trust prompt" ;;
+      3) spawn_fail "failed to submit the trust prompt answer" ;;
+      *) spawn_fail "failed to handle the trust prompt" ;;
+    esac
   fi
   if is_ready "$screen"; then ready=1; break; fi
   sleep "$ORCA_POLL_INTERVAL"

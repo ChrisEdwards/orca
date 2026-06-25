@@ -27,14 +27,14 @@ eq() { [[ "$1" == "$2" ]]; }
 json_get() { jq -er "$2" "$1"; }
 valid_json() { jq -e . "$1" >/dev/null; }
 
-for script in orca-adapter.sh orca-cmux.sh orca-spawn.sh; do
+for script in orca-adapter.sh orca-cmux.sh orca-spawn.sh orca-trust-prompt.sh; do
   path="$AGENT_SKILL_DIR/scripts/$script"
   ok "orca-agent/$script: exists in skill scripts" test -f "$path"
   ok "orca-agent/$script: is executable" test -x "$path"
   ok "orca-agent/$script: bash syntax is valid" bash -n "$path"
 done
 
-for script in orca-fork-adapter.sh orca-cmux.sh orca-fork.sh; do
+for script in orca-fork-adapter.sh orca-cmux.sh orca-fork.sh orca-trust-prompt.sh; do
   path="$FORK_SKILL_DIR/scripts/$script"
   ok "orca-fork/$script: exists in skill scripts" test -f "$path"
   ok "orca-fork/$script: is executable" test -x "$path"
@@ -54,6 +54,7 @@ ok "Codex orca-fork project skill entry exists" test -L "$CODEX_FORK_SKILL_LINK"
 ok "Codex orca-fork project skill entry points at canonical skill" eq "$(readlink "$CODEX_FORK_SKILL_LINK")" "../../skills/orca-fork"
 ok "Codex orca-fork project skill resolves to SKILL.md" test -f "$CODEX_FORK_SKILL_LINK/SKILL.md"
 ok "shared orca-cmux helpers are exact copies" cmp -s "$AGENT_SKILL_DIR/scripts/orca-cmux.sh" "$FORK_SKILL_DIR/scripts/orca-cmux.sh"
+ok "shared orca-trust-prompt helpers are exact copies" cmp -s "$AGENT_SKILL_DIR/scripts/orca-trust-prompt.sh" "$FORK_SKILL_DIR/scripts/orca-trust-prompt.sh"
 
 ok "Codex plugin manifest exists" test -f "$PLUGIN_MANIFEST"
 ok "Codex plugin manifest is valid JSON" valid_json "$PLUGIN_MANIFEST"
