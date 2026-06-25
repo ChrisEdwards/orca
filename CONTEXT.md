@@ -38,11 +38,35 @@ Keystrokes or commands orca sends a worker right after starting it, to put it in
 ## cmux units
 
 **Workspace**
-cmux's top-level container of panes and surfaces, with one working directory and a sidebar. Orca adds each worker as a tab in the calling workspace rather than spinning up a workspace per worker.
+cmux's top-level container of panes and surfaces, with workspace-level `current_directory` metadata and a sidebar. A workspace does not own the working directory of every worker surface inside it.
 _Avoid_ window, session
 
 **Calling workspace**
 The cmux workspace the orchestrator was fired from. New worker tabs are added here, so invoking orca from a different workspace places its workers there instead. There is no fixed, dedicated orca workspace.
+
+**Target workspace**
+The cmux workspace where Orca should create a new worker surface for a spawn or fork operation. By default this is the calling workspace, but a caller may intentionally choose another workspace.
+_Avoid_ destination workspace, execution workspace
+
+**Workspace name**
+A human-readable workspace title used to select or create a target workspace within the caller's current cmux window. Workspace name matching is exact; it is not a durable handle.
+_Avoid_ workspace ref
+
+**Workspace id**
+A stable cmux workspace UUID used as a durable target. Positional refs such as `workspace:3` are not workspace ids.
+_Avoid_ workspace ref
+
+**Worker working directory**
+The filesystem directory a spawned worker starts in. It may default from workspace metadata, but a caller can choose a different directory for the new worker surface.
+_Avoid_ repo when the filesystem directory, not the repository identity, is meant
+
+**Current spawn context**
+The caller's current cmux context used to fill omitted spawn inputs. If no target workspace is supplied, Orca uses the calling workspace. If no worker working directory is supplied, Orca uses the current working directory from the caller's context.
+_Avoid_ current project when the caller may be outside a project
+
+**Workspace selection policy**
+The rule Orca applies when resolving a requested target workspace. When a spawn names a target workspace, Orca searches the caller's current cmux window, uses the existing workspace if exactly one matches, or creates a missing workspace in that window before opening the worker surface.
+_Avoid_ workspace mode
 
 **Surface**
 A single terminal (or markdown or browser view) inside a pane. A worker occupies one terminal surface. This is the thing orca writes to and reads from.
