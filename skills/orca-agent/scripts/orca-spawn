@@ -1,0 +1,246 @@
+#!/usr/bin/env bash
+#
+# orca-spawn - spawn one AI coding worker in a cmux tab (fire and confirm).
+#
+# Runs the full spawn sequence for a single task: resolve the calling workspace,
+# write the brief, open a worker tab, launch the agent, wait for it to come
+# ready, put it in the right mode, hand it the brief, and report back. It does
+# not monitor the worker afterward and never tears it down.
+#
+# All surface I/O goes through the bundled orca-cmux script (the cmux seam,
+# UUID-only). All agent-specific strings come from the bundled orca-adapter.
+# orca-spawn itself only adds the orchestration: workspace resolution,
+# brief/.gitignore handling, the readiness poll, and the mode-cycle loop.
+#
+# Usage:
+#   orca-spawn --agent <claude|codex> --task <title> \
+#              (--brief <text> | --brief-file <path>) [--cwd <dir>]
+#
+# Output (stdout, key=value lines):
+#   status=ok|error
+#   task_id=<kebab slug>
+#   surface=<worker surface UUID>      (once the tab is created)
+#   tab=<task id>
+#   cwd=<resolved working directory>
+#   brief=<relative brief path>
+#   error=<reason>                      (on failure)
+#
+# On any post-launch failure the worker tab is LEFT OPEN (never closed) so the
+# human can flip to it and see what happened, and the error names the surface
+# UUID. orca-spawn only ever acts on the worker surface, never the orchestrator's.
+#
+# Requires: jq, and a reachable cmux (CMUX_BIN, default "cmux").
+# Facts verified on cmux 0.64.16, Claude Code v2.1.190, Codex v0.142.0.
+set -uo pipefail
+
+BIN_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+ORCA_CMUX="$BIN_DIR/orca-cmux"
+ORCA_ADAPTER="$BIN_DIR/orca-adapter"
+
+export CMUX_BIN=${CMUX_BIN:-cmux}
+
+# Poll/cycle pacing. Counts not wall-clock, so tests are deterministic.
+# ~30 reads at 1s ≈ a 30s readiness budget; the mode cap comes from the adapter.
+ORCA_READY_POLLS=${ORCA_READY_POLLS:-30}
+ORCA_POLL_INTERVAL=${ORCA_POLL_INTERVAL:-1}
+ORCA_MODE_INTERVAL=${ORCA_MODE_INTERVAL:-1}
+
+# State filled in as we go, so spawn_fail can report what exists.
+TASK_ID=""
+SURFACE=""
+CWD=""
+BRIEF_REL=""
+
+die() {
+  local msg=$1
+  printf 'status=error\n'
+  [[ -n "$TASK_ID" ]] && printf 'task_id=%s\n' "$TASK_ID"
+  [[ -n "$SURFACE" ]] && printf 'surface=%s\n' "$SURFACE"
+  [[ -n "$CWD" ]] && printf 'cwd=%s\n' "$CWD"
+  [[ -n "$BRIEF_REL" ]] && printf 'brief=%s\n' "$BRIEF_REL"
+  printf 'error=%s\n' "$msg"
+  printf 'orca-spawn: %s\n' "$msg" >&2
+  exit 1
+}
+
+need_value() {
+  local flag=$1
+  shift
+  (($# >= 2)) || die "$flag needs a value"
+}
+
+is_ready() {
+  local screen=$1
+  case "$agent" in
+    codex)
+      grep -qF -- "$ready_marker" <<<"$screen" && grep -qF -- " · " <<<"$screen"
+      ;;
+    *)
+      grep -qF -- "$ready_marker" <<<"$screen"
+      ;;
+  esac
+}
+
+read_worker_screen() {
+  local out
+  if ! out=$("$ORCA_CMUX" read-screen --surface "$SURFACE" --lines 40 2>&1); then
+    out=${out//$'\n'/ }
+    spawn_fail "failed to read worker screen: $out"
+  fi
+  printf '%s\n' "$out"
+}
+
+# Fail after the worker tab exists: leave it open, name the surface, exit 1.
+spawn_fail() {
+  local msg=$1
+  printf 'status=error\n'
+  [[ -n "$TASK_ID" ]] && printf 'task_id=%s\n' "$TASK_ID"
+  [[ -n "$SURFACE" ]] && printf 'surface=%s\n' "$SURFACE"
+  [[ -n "$CWD" ]] && printf 'cwd=%s\n' "$CWD"
+  [[ -n "$BRIEF_REL" ]] && printf 'brief=%s\n' "$BRIEF_REL"
+  printf 'error=%s\n' "$msg"
+  if [[ -n "$SURFACE" ]]; then
+    printf 'orca-spawn: %s Worker tab left open at surface %s so you can inspect it.\n' \
+      "$msg" "$SURFACE" >&2
+  else
+    printf 'orca-spawn: %s\n' "$msg" >&2
+  fi
+  exit 1
+}
+
+# --- parse arguments -------------------------------------------------------
+agent=""; task=""; brief=""; brief_file=""; cwd_override=""
+have_brief_text=0; have_brief_file=0
+while (($#)); do
+  case "$1" in
+    --agent)      need_value --agent "$@"; agent=$2; shift 2 ;;
+    --task)       need_value --task "$@"; task=$2; shift 2 ;;
+    --brief)      need_value --brief "$@"; brief=$2; have_brief_text=1; shift 2 ;;
+    --brief-file) need_value --brief-file "$@"; brief_file=$2; have_brief_file=1; shift 2 ;;
+    --cwd)        need_value --cwd "$@"; cwd_override=$2; shift 2 ;;
+    -h|--help)    die "usage: orca-spawn --agent <claude|codex> --task <title> (--brief <text>|--brief-file <path>) [--cwd <dir>]" ;;
+    *) die "unexpected argument: $1" ;;
+  esac
+done
+[[ -n "$agent" ]] || die "--agent is required"
+[[ -n "$task" ]]  || die "--task is required"
+((have_brief_text + have_brief_file == 1)) || die "exactly one of --brief or --brief-file is required"
+
+# --- adapter selection (validates the agent type) --------------------------
+launch=$("$ORCA_ADAPTER" "$agent" launch 2>/dev/null) \
+  || die "unknown agent type: $agent (known: $("$ORCA_ADAPTER" list | paste -sd, -))"
+ready_marker=$("$ORCA_ADAPTER" "$agent" ready-marker)
+mode=$("$ORCA_ADAPTER" "$agent" mode)
+
+# --- brief content ---------------------------------------------------------
+if [[ -n "$brief_file" ]]; then
+  [[ -f "$brief_file" ]] || die "brief file not found: $brief_file"
+  brief=$(cat "$brief_file")
+fi
+
+# --- 1. resolve the calling workspace UUID and directory -------------------
+identify=$(CMUX_QUIET=1 "$CMUX_BIN" identify --json --id-format both 2>/dev/null) \
+  || die "cannot reach cmux (is it running, and are we inside a cmux terminal?)"
+ws=$(jq -r '.caller.workspace_id // empty' <<<"$identify" 2>/dev/null)
+[[ -n "$ws" ]] || die "could not resolve the calling workspace UUID from cmux identify"
+
+if [[ -n "$cwd_override" ]]; then
+  CWD=$cwd_override
+else
+  CWD=$(CMUX_QUIET=1 "$CMUX_BIN" list-workspaces --json --id-format both 2>/dev/null \
+    | jq -r --arg ws "$ws" '.workspaces[]? | select(.id==$ws) | .current_directory // empty' 2>/dev/null)
+  # Fall back to the invoking directory if cmux does not report one.
+  [[ -n "$CWD" ]] || CWD=$PWD
+fi
+[[ -d "$CWD" ]] || die "working directory does not exist: $CWD"
+
+# --- 2. task id (kebab slug, collision-suffixed) ---------------------------
+slug=$(printf '%s' "$task" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-')
+slug=${slug#-}; slug=${slug%-}
+[[ -n "$slug" ]] || slug=task
+
+briefs_dir="$CWD/.orca/briefs"
+mkdir -p "$briefs_dir" || die "could not create $briefs_dir"
+TASK_ID=$slug
+n=2
+while true; do
+  BRIEF_REL=".orca/briefs/$TASK_ID.md"
+  brief_path="$CWD/$BRIEF_REL"
+  if [[ -e "$brief_path" ]]; then
+    TASK_ID="$slug-$n"; n=$((n + 1))
+    continue
+  fi
+  if ( set -o noclobber; printf '%s\n' "$brief" > "$brief_path" ) 2>/dev/null; then
+    break
+  fi
+  [[ -e "$brief_path" ]] || die "could not write brief to $brief_path"
+  TASK_ID="$slug-$n"; n=$((n + 1))
+done
+
+# --- 3. write the brief and ensure .orca/ is gitignored --------------------
+gitignore="$CWD/.gitignore"
+if [[ -f "$gitignore" ]]; then
+  if ! grep -qE '^\.orca/?$' "$gitignore"; then
+    [[ -s "$gitignore" && $(tail -c 1 "$gitignore") != $'\n' ]] && printf '\n' >> "$gitignore"
+    printf '.orca/\n' >> "$gitignore"
+  fi
+else
+  printf '.orca/\n' > "$gitignore"
+fi
+
+# --- 4. create the worker tab (every later op targets this UUID) -----------
+SURFACE=$("$ORCA_CMUX" create-tab --workspace "$ws" --cwd "$CWD" 2>/dev/null) \
+  || die "could not create the worker tab (cmux unreachable?)"
+[[ -n "$SURFACE" ]] || die "create-tab returned no surface UUID"
+
+# Name the tab from the task id (cmux may later replace it with its own title).
+"$CMUX_BIN" rename-tab --surface "$SURFACE" "$TASK_ID" >/dev/null 2>&1 || true
+
+# --- 5. launch the agent in the worker cwd ---------------------------------
+"$ORCA_CMUX" send --surface "$SURFACE" "$launch" >/dev/null \
+  || spawn_fail "failed to send the launch command"
+"$ORCA_CMUX" send-key --surface "$SURFACE" enter >/dev/null \
+  || spawn_fail "failed to send enter after launch"
+
+# --- 6. poll until the readiness marker appears ----------------------------
+ready=0
+for ((p = 0; p < ORCA_READY_POLLS; p++)); do
+  screen=$(read_worker_screen)
+  if is_ready "$screen"; then ready=1; break; fi
+  sleep "$ORCA_POLL_INTERVAL"
+done
+((ready == 1)) || spawn_fail "readiness marker '$ready_marker' never appeared (agent did not come up)."
+
+# --- 7. mode step (optional; cycle until the target marker appears) --------
+if [[ "$mode" == cycle ]]; then
+  mode_key=$("$ORCA_ADAPTER" "$agent" mode-key)
+  mode_target=$("$ORCA_ADAPTER" "$agent" mode-target)
+  mode_max=$("$ORCA_ADAPTER" "$agent" mode-max-attempts)
+  attempts=0
+  while true; do
+    screen=$(read_worker_screen)
+    if grep -qF -- "$mode_target" <<<"$screen"; then break; fi
+    if ((attempts >= mode_max)); then
+      spawn_fail "mode never reached '$mode_target' after $mode_max attempts."
+    fi
+    "$ORCA_CMUX" send-key --surface "$SURFACE" "$mode_key" >/dev/null \
+      || spawn_fail "failed to send the mode key '$mode_key'"
+    attempts=$((attempts + 1))
+    sleep "$ORCA_MODE_INTERVAL"
+  done
+fi
+
+# --- 8. deliver the brief by pointer ---------------------------------------
+"$ORCA_CMUX" send --surface "$SURFACE" \
+  "Read $BRIEF_REL and carry out the task it describes." >/dev/null \
+  || spawn_fail "failed to deliver the brief"
+"$ORCA_CMUX" send-key --surface "$SURFACE" enter >/dev/null \
+  || spawn_fail "failed to send enter after the brief"
+
+# --- 9. report back --------------------------------------------------------
+printf 'status=ok\n'
+printf 'task_id=%s\n' "$TASK_ID"
+printf 'surface=%s\n' "$SURFACE"
+printf 'tab=%s\n' "$TASK_ID"
+printf 'cwd=%s\n' "$CWD"
+printf 'brief=%s\n' "$BRIEF_REL"

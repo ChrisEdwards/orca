@@ -7,7 +7,15 @@ description: Spawn one AI coding worker (Claude Code or Codex) in a new cmux tab
 
 Spawn one worker for one task, confirm it took, and report back.
 
-This skill is a **thin conversational wrapper**. All real work lives in `orca-spawn`, which drives `orca-cmux` (the cmux seam) and `orca-adapter` (per-agent config). Do not reimplement launch, readiness, mode-cycling, or screen-reading logic here. Gather inputs, shell out to `orca-spawn`, relay the result.
+This skill is a **thin conversational wrapper**. All real work lives in the bundled `scripts/orca-spawn`, which drives `scripts/orca-cmux` (the cmux seam) and `scripts/orca-adapter` (per-agent config). Do not reimplement launch, readiness, mode-cycling, or screen-reading logic here. Gather inputs, shell out to the bundled spawn script, relay the result.
+
+## Prerequisites
+
+Require these external CLIs on `PATH`:
+
+- `cmux`
+- `jq`
+- `claude` for Claude workers, or `codex` for Codex workers
 
 ## Inputs to gather from the conversation
 
@@ -21,17 +29,17 @@ This skill is a **thin conversational wrapper**. All real work lives in `orca-sp
 Single-line brief:
 
 ```bash
-orca-spawn --agent <claude|codex> --task "<title>" --brief "<brief text>"
+scripts/orca-spawn --agent <claude|codex> --task "<title>" --brief "<brief text>"
 ```
 
 Multi-line brief (preferred for anything non-trivial): write the brief to a file, then point at it:
 
 ```bash
-orca-spawn --agent claude --task "Fix the login redirect" \
+scripts/orca-spawn --agent claude --task "Fix the login redirect" \
   --brief-file /tmp/brief.md --cwd ~/projects/app
 ```
 
-`orca-spawn` lives in orca's `bin/` directory. Put that directory on `PATH`, or invoke it by path to your orca checkout.
+Resolve `scripts/orca-spawn` relative to this skill directory. In an orca repo checkout, `bin/orca-spawn` is also available as a compatibility wrapper.
 
 ## Report back
 
