@@ -20,6 +20,7 @@
 #   read-screen --surface <uuid> [--lines N]  read N lines (default 40)
 #   close       --surface <uuid>              close the surface
 #   list                                      list surfaces (for debugging)
+#   identify-json                            print caller identity as JSON
 #   list-workspaces-json                      list workspaces in caller window as JSON
 #   list-surfaces-json --workspace <uuid>     list workspace surfaces as JSON
 set -euo pipefail
@@ -65,7 +66,7 @@ create_tab() {
 }
 
 cmd=${1:-}
-[[ -n "$cmd" ]] || die "usage: orca-cmux <create-tab|send|send-key|read-screen|close|list|list-workspaces-json|list-surfaces-json> [options]"
+[[ -n "$cmd" ]] || die "usage: orca-cmux <create-tab|send|send-key|read-screen|close|list|identify-json|list-workspaces-json|list-surfaces-json> [options]"
 shift
 
 case "$cmd" in
@@ -133,6 +134,11 @@ case "$cmd" in
   list)
     (($# == 0)) || die "list: takes no arguments"
     cmux_exec list-pane-surfaces --id-format both
+    ;;
+
+  identify-json)
+    (($# == 0)) || die "identify-json: takes no arguments"
+    cmux_exec identify --json --id-format both
     ;;
 
   list-workspaces-json)

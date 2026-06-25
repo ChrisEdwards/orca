@@ -33,6 +33,9 @@ case "$1" in
   new-surface)
     echo "OK surface:43 (${FAKE_SURFACE_UUID:-AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE}) pane:16 (PPPPPPPP-0000-0000-0000-000000000000) workspace:9 (WWWWWWWW-0000-0000-0000-000000000000)"
     ;;
+  identify)
+    echo '{ "caller": { "surface_id": "ORIGIN-SURFACE", "workspace_id": "ORIGIN-WORKSPACE" } }'
+    ;;
   read-screen|capture-pane)
     printf 'line one\nline two\n'
     ;;
@@ -154,6 +157,11 @@ assert_args "close emits close-surface command" \
 orca list >/dev/null
 assert_args "list emits list-pane-surfaces command" \
   list-pane-surfaces --id-format both
+
+# identify-json maps to cmux's caller identity command.
+orca identify-json >/dev/null
+assert_args "identify-json emits JSON identify command" \
+  identify --json --id-format both
 
 # list-workspaces-json maps to cmux's JSON workspace listing for descriptor resolution.
 orca list-workspaces-json >/dev/null

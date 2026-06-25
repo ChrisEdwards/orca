@@ -19,6 +19,7 @@ FAKE="$TMP/cmux"
 SFC_CLAUDE="5DE180A2-FEB8-4733-B750-2681FA2C2982"
 SFC_CODEX="6EE280A2-FEB8-4733-B750-2681FA2C2983"
 SFC_OTHER="7FF280A2-FEB8-4733-B750-2681FA2C2984"
+SFC_ORIGIN="8AA280A2-FEB8-4733-B750-2681FA2C2985"
 WS_AIML="90D8E74A-E0EE-4FCB-8F7C-105574F46F01"
 WS_OTHER="80D8E74A-E0EE-4FCB-8F7C-105574F46F02"
 
@@ -39,7 +40,7 @@ arg_after() {
 
 case "$sub" in
   identify)
-    printf '{ "caller": { "workspace_id": "%s", "surface_id": "ORCH-SURFACE-UUID" } }\n' "$FAKE_WS_AIML"
+    printf '{ "caller": { "workspace_id": "%s", "surface_id": "%s" } }\n' "$FAKE_WS_AIML" "$FAKE_SFC_ORIGIN"
     ;;
   list-workspaces)
     cat <<JSON
@@ -141,6 +142,7 @@ msg_run() {
   LAST_OUT=$(CMUX_BIN="$FAKE" FAKE_CALLS="$CALLS" FAKE_SCENARIO="$SCENARIO" \
     FAKE_WS_AIML="$WS_AIML" FAKE_WS_OTHER="$WS_OTHER" \
     FAKE_SFC_CLAUDE="$SFC_CLAUDE" FAKE_SFC_CODEX="$SFC_CODEX" FAKE_SFC_OTHER="$SFC_OTHER" \
+    FAKE_SFC_ORIGIN="$SFC_ORIGIN" \
     ORCA_READY_POLLS=2 ORCA_POLL_INTERVAL=0 \
     "$MSG" "$@" 2>"$errfile")
   LAST_RC=$?
@@ -148,12 +150,17 @@ msg_run() {
 }
 
 field() { grep -E "^$1=" <<<"$LAST_OUT" | head -1 | cut -d= -f2-; }
+message_sent() { awk 'BEGIN{p=0} /^message_sent=/{sub(/^message_sent=/,""); p=1} p{print}' <<<"$LAST_OUT"; }
 calls_have_line() { grep -qxF -- "$1" "$CALLS"; }
 called_subcommand() { grep -qE "^$1(\t|$)" "$CALLS"; }
 mentions() { grep -qiF -- "$1" <<<"$LAST_OUT"$'\n'"$LAST_ERR"; }
 rc_is() { [[ "$LAST_RC" -eq "$1" ]]; }
 rc_not() { [[ "$LAST_RC" -ne "$1" ]]; }
 eq() { [[ "$1" == "$2" ]]; }
+
+with_footer() {
+  printf '%s\n\n---\nFrom the agent at surface %s.\nTo reply, use the orca-msg skill targeting that surface if needed.' "$1" "$SFC_ORIGIN"
+}
 
 # === Pasted copy-ids block extracts only surface_id ========================
 IDS="$TMP/ids.txt"
@@ -173,7 +180,8 @@ ok  "copy ids: status=ok"              eq "$(field status)" ok
 ok  "copy ids: targets surface_id"     eq "$(field surface)" "$SFC_CLAUDE"
 ok  "copy ids: detects claude"         eq "$(field agent)" claude
 ok  "copy ids: sends exact message" \
-      calls_have_line $'send\t--surface\t'"$SFC_CLAUDE"$'\tPlease summarize status.'
+      calls_have_line $'send\t--surface\t'"$SFC_CLAUDE"$'\t'"$(with_footer "Please summarize status.")"
+ok  "copy ids: reports origin surface" mentions "$SFC_ORIGIN"
 ok  "copy ids: presses enter" \
       calls_have_line $'send-key\t--surface\t'"$SFC_CLAUDE"$'\tenter'
 
@@ -198,7 +206,7 @@ ok  "descriptor: selected claude"        eq "$(field surface)" "$SFC_CLAUDE"
 ok  "descriptor: listed workspaces"      called_subcommand list-workspaces
 ok  "descriptor: listed surfaces"        called_subcommand list-pane-surfaces
 ok  "descriptor: sends message" \
-      calls_have_line $'send\t--surface\t'"$SFC_CLAUDE"$'\tReview the decision.'
+      calls_have_line $'send\t--surface\t'"$SFC_CLAUDE"$'\t'"$(with_footer "Review the decision.")"
 
 # === Ambiguous descriptor reports candidates and does not send =============
 SCENARIO=descriptor-ambiguous
@@ -217,7 +225,7 @@ msg_run --surface "$SFC_CODEX" --message "Proceed with tests."
 ok  "codex infer: exits 0"              rc_is 0
 ok  "codex infer: agent=codex"          eq "$(field agent)" codex
 ok  "codex infer: sends message" \
-      calls_have_line $'send\t--surface\t'"$SFC_CODEX"$'\tProceed with tests.'
+      calls_have_line $'send\t--surface\t'"$SFC_CODEX"$'\t'"$(with_footer "Proceed with tests.")"
 
 # === Blocked states are refused, not answered ==============================
 SCENARIO=codex-blocked
@@ -235,7 +243,7 @@ TEXT=$'Line one with spaces\nLine two with `backticks` and $vars'
 msg_run --surface "$SFC_CLAUDE" --agent claude --message "$TEXT"
 ok  "direct multiline: exits 0"          rc_is 0
 ok  "direct multiline: preserves argv" \
-      calls_have_line $'send\t--surface\t'"$SFC_CLAUDE"$'\t'"$TEXT"
+      calls_have_line $'send\t--surface\t'"$SFC_CLAUDE"$'\t'"$(with_footer "$TEXT")"
 
 # === Message-file flow sends an absolute path and leaves the file ==========
 MESSAGE_FILE="$TMP/message.md"
@@ -243,12 +251,13 @@ printf 'Long context\n' > "$MESSAGE_FILE"
 SCENARIO=happy
 msg_run --surface "$SFC_CLAUDE" --agent claude --message-file "$MESSAGE_FILE"
 
-sent=$(field message_sent)
+sent=$(message_sent)
 ok  "message file: exits 0"              rc_is 0
 ok  "message file: reports absolute path" eq "$(field message_file)" "$MESSAGE_FILE"
 ok  "message file: sends read instruction" calls_have_line $'send\t--surface\t'"$SFC_CLAUDE"$'\t'"$sent"
 ok  "message file: file remains"         test -f "$MESSAGE_FILE"
 ok  "message file: instruction has path"  mentions "$MESSAGE_FILE"
+ok  "message file: instruction has origin" mentions "$SFC_ORIGIN"
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [[ "$FAIL" -eq 0 ]]

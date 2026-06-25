@@ -24,6 +24,7 @@ TARGET_FILE=""
 MESSAGE=""
 MESSAGE_FILE=""
 MESSAGE_FILE_ABS=""
+ORIGIN_SURFACE=""
 HAVE_MESSAGE=0
 HAVE_MESSAGE_FILE=0
 
@@ -144,6 +145,28 @@ read_target_screen() {
     die "failed to read target screen: $out"
   fi
   printf '%s\n' "$out"
+}
+
+resolve_origin_surface() {
+  local identify origin
+  if ! identify=$("$ORCA_CMUX" identify-json 2>/dev/null); then
+    return 0
+  fi
+  origin=$(jq -r '.caller.surface_id // .surface_id // empty' <<<"$identify" 2>/dev/null)
+  if [[ "$origin" =~ $UUID_RE ]]; then
+    ORIGIN_SURFACE=$origin
+  fi
+}
+
+append_reply_footer() {
+  local message=$1
+  if [[ -n "$ORIGIN_SURFACE" ]]; then
+    printf '%s\n\n---\nFrom the agent at surface %s.\nTo reply, use the orca-msg skill targeting that surface if needed.' \
+      "$message" "$ORIGIN_SURFACE"
+  else
+    printf '%s\n\n---\nFrom an Orca message sender; the origin surface was not available.\nTo reply, ask the human for a target surface_id and use the orca-msg skill if needed.' \
+      "$message"
+  fi
 }
 
 workspace_matches() {
@@ -275,6 +298,9 @@ if ((HAVE_MESSAGE_FILE)); then
   MESSAGE_FILE_ABS=$(absolute_path "$MESSAGE_FILE") || die "could not resolve message file path: $MESSAGE_FILE"
   MESSAGE="Read $MESSAGE_FILE_ABS and respond to the request it contains."
 fi
+
+resolve_origin_surface
+MESSAGE=$(append_reply_footer "$MESSAGE")
 
 # --- readiness -------------------------------------------------------------
 ready=0
