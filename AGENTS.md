@@ -1,6 +1,21 @@
 ## Instructions
 
-All development should be done with TDD if feasible. 
+All development should be done with TDD if feasible.
+
+## Skill Packaging
+
+Skills must be self-contained. Runtime files a skill needs belong inside that
+skill directory, usually under `scripts/`, `references/`, or `assets/`.
+
+Do not have a skill reference files outside its own directory tree, including
+sibling skills, repo-root scripts, or absolute installed plugin/cache paths.
+OpenSkills, Codex plugins, and other installers may copy each skill as an
+isolated unit.
+
+When two skills need the same helper, prefer duplicating the small helper into
+each skill over introducing a shared runtime path. If the helper is too large or
+needs one source of truth, promote it to a separately installed external CLI and
+document it as a prerequisite.
 
 <!-- br-agent-instructions-v1 -->
 
