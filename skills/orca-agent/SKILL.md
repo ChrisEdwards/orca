@@ -45,10 +45,10 @@ Example: "Spawned a Codex worker for `fix-login-redirect` in tab `fix-login-redi
 
 ## On failure
 
-A non-zero exit prints `status=error` with an `error=` reason and, when the tab was created, the `surface=` UUID. The worker tab is **left open on purpose**. Relay the error and the surface UUID so the human can flip to that tab and see what happened. Do not retry blindly, and do not close the tab.
+A non-zero exit prints `status=error` with an `error=` reason and, when the tab was created, the `surface=` UUID. The worker tab is **left open on purpose** after launch has started. Relay the error and the surface UUID when present so the human can flip to that tab and see what happened. Do not retry blindly, and do not close the tab.
 
 ## Boundaries
 
 - One task, one worker, no monitoring afterward. This is fire and confirm.
-- Nothing is persisted. The orchestrator holds the surface UUID in its own context.
+- No worker registry or monitoring state is persisted. Brief files are written under `.orca/briefs/`, and `orca-spawn` ensures `.orca/` is gitignored.
 - The worker opens in the calling workspace, the one this session was fired from.

@@ -14,7 +14,7 @@
 # seam the tests inject a recording fake through.
 #
 # Commands:
-#   create-tab  --workspace <uuid>            create a terminal surface, print its UUID
+#   create-tab  --workspace <uuid> [--cwd D]  create a terminal surface, print its UUID
 #   send        --surface <uuid> <text>       send literal text (no trailing enter)
 #   send-key    --surface <uuid> <key>        send a key (enter, "shift+tab", ...)
 #   read-screen --surface <uuid> [--lines N]  read N lines (default 40)
@@ -44,13 +44,15 @@ require_uuid() {
 # need_value <command> <flag> <remaining-arg-count>
 need_value() { (($3 >= 2)) || die "$1: $2 needs a value"; }
 
-# create_tab <workspace-uuid>
+# create_tab <workspace-uuid> [cwd]
 # Creates a plain terminal surface in the given workspace and prints its stable
 # surface UUID. Uses --focus false so spawning never steals the human's focus.
 create_tab() {
-  local ws=$1 out uuid
-  out=$(cmux_exec new-surface --type terminal --workspace "$ws" \
-    --focus false --id-format both)
+  local ws=$1 cwd=${2:-} out uuid
+  local args=(new-surface --type terminal --workspace "$ws")
+  [[ -n "$cwd" ]] && args+=(--working-directory "$cwd")
+  args+=(--focus false --id-format both)
+  out=$(cmux_exec "${args[@]}")
   # Output: "OK surface:N (UUID) pane:N (UUID) workspace:N (UUID)".
   # The first parenthesised value is the surface UUID, the only stable handle.
   uuid=$(printf '%s\n' "$out" \
@@ -66,15 +68,16 @@ shift
 
 case "$cmd" in
   create-tab)
-    ws=""
+    ws=""; cwd=""
     while (($#)); do
       case "$1" in
         --workspace) need_value create-tab --workspace $#; ws=$2; shift 2 ;;
+        --cwd)       need_value create-tab --cwd $#;       cwd=$2; shift 2 ;;
         *) die "create-tab: unexpected argument: $1" ;;
       esac
     done
     require_uuid workspace "$ws"
-    create_tab "$ws"
+    create_tab "$ws" "$cwd"
     ;;
 
   send|send-key)

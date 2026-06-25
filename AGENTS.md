@@ -1,3 +1,7 @@
+## Instructions
+
+All development should be done with TDD if feasible. 
+
 <!-- br-agent-instructions-v1 -->
 
 ---

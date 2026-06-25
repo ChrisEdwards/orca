@@ -78,8 +78,16 @@ case "$sub" in
         printf '› Implement {feature}\n'
         printf 'gpt-5.5 high · %s\n' "$FAKE_CWD"
         ;;
+      codex-chevron-only)
+        [[ -f "$launched" ]] || { echo "booting codex"; exit 0; }
+        printf '› shell prompt, not codex\n'
+        ;;
       never-ready)
         echo "loading, please wait..."
+        ;;
+      read-screen-error)
+        echo "screen unavailable" >&2
+        exit 2
         ;;
       *) echo "no scenario set" ;;
     esac
@@ -125,13 +133,39 @@ spawn() {
 
 field() { grep -E "^$1=" <<<"$LAST_OUT" | head -1 | cut -d= -f2-; }
 count_shift_tabs() { grep -c $'\tshift+tab$' "$CALLS"; }
-calls_have() { grep -qF "$1" "$CALLS"; }
+calls_have() { grep -qF -- "$1" "$CALLS"; }
+calls_have_line() { grep -qxF -- "$1" "$CALLS"; }
 called_subcommand() { grep -qE "^$1(\t|$)" "$CALLS"; }
 mentions() { grep -qiF "$1" <<<"$LAST_OUT"$'\n'"$LAST_ERR"; }
 mentions_err() { grep -qF "$1" <<<"$LAST_ERR"; }
 rc_is() { [[ "$LAST_RC" -eq "$1" ]]; }
 rc_not() { [[ "$LAST_RC" -ne "$1" ]]; }
 eq() { [[ "$1" == "$2" ]]; }
+
+spawn_must_finish() {
+  local timeout=$1; shift
+  local out="$TMP/timeout.out" err="$TMP/timeout.err" done="$TMP/timeout.done"
+  rm -f "$out" "$err" "$done"
+  CMUX_BIN="$FAKE" FAKE_CALLS="$CALLS" FAKE_STATE="$STATE" \
+    FAKE_SURFACE="$SURFACE" FAKE_WS="$WS" FAKE_CWD="$DEFAULT_CWD" \
+    FAKE_SCENARIO="$SCENARIO" \
+    ORCA_READY_POLLS="$POLLS" ORCA_POLL_INTERVAL=0 ORCA_MODE_INTERVAL=0 \
+    "$SPAWN" "$@" >"$out" 2>"$err" &
+  local pid=$!
+  (
+    sleep "$timeout"
+    kill "$pid" 2>/dev/null || true
+  ) &
+  local watcher=$!
+  wait "$pid"
+  local rc=$?
+  kill "$watcher" 2>/dev/null || true
+  wait "$watcher" 2>/dev/null || true
+  LAST_OUT=$(cat "$out")
+  LAST_ERR=$(cat "$err")
+  LAST_RC=$rc
+  [[ "$rc" -ne 143 && "$rc" -ne 137 ]]
+}
 
 # === Claude happy path =====================================================
 WORK="$TMP/repo-claude"; mkdir -p "$WORK"
@@ -146,7 +180,9 @@ ok  "claude: tab named from task id"       eq "$(field tab)" "fix-the-login-bug"
 ok  "claude: cycles shift+tab to auto (3)" eq "$(count_shift_tabs)" 3
 ok  "claude: delivers pointer brief" \
       calls_have "Read .orca/briefs/fix-the-login-bug.md and carry out the task it describes."
-ok  "claude: launch cds into cwd and runs claude" calls_have "cd $WORK && claude"
+ok  "claude: create-tab sets the worker cwd" calls_have $'--working-directory\t'"$WORK"
+ok  "claude: launch sends only the agent command" \
+      calls_have_line $'send\t--surface\t'"$SURFACE"$'\tclaude'
 ok  "claude: brief file written"           test -f "$WORK/.orca/briefs/fix-the-login-bug.md"
 ok  "claude: brief file has the brief text" \
       eq "$(cat "$WORK/.orca/briefs/fix-the-login-bug.md")" "Make login work."
@@ -164,7 +200,8 @@ ok  "codex: returns the surface UUID"   eq "$(field surface)" "$SURFACE"
 ok  "codex: no mode step (0 shift+tab)" eq "$(count_shift_tabs)" 0
 ok  "codex: delivers pointer brief" \
       calls_have "Read .orca/briefs/add-unit-tests.md and carry out the task it describes."
-ok  "codex: launch runs codex -p yolo"  calls_have "cd $WORK2 && codex -p yolo"
+ok  "codex: launch sends only codex -p yolo" \
+      calls_have_line $'send\t--surface\t'"$SURFACE"$'\tcodex -p yolo'
 ok  "codex: brief file written"         test -f "$WORK2/.orca/briefs/add-unit-tests.md"
 
 # === gitignore is not duplicated when already present ======================
@@ -174,6 +211,14 @@ DEFAULT_CWD="$WORK3"; SCENARIO=codex
 spawn --agent codex --task "Thing" --brief "x"
 ok  "gitignore: .orca/ not duplicated"      eq "$(grep -cxF ".orca/" "$WORK3/.gitignore")" 1
 ok  "gitignore: existing entries preserved" grep -qxF "node_modules/" "$WORK3/.gitignore"
+
+# === gitignore append preserves final rule without trailing newline =========
+WORK8="$TMP/repo-gi-nonewline"; mkdir -p "$WORK8"
+printf 'node_modules' > "$WORK8/.gitignore"
+DEFAULT_CWD="$WORK8"; SCENARIO=codex
+spawn --agent codex --task "No newline" --brief "x"
+ok  "gitignore newline: existing rule preserved" grep -qxF "node_modules" "$WORK8/.gitignore"
+ok  "gitignore newline: .orca/ added separately" grep -qxF ".orca/" "$WORK8/.gitignore"
 
 # === task id collision handling ============================================
 DEFAULT_CWD="$WORK"; SCENARIO=claude
@@ -190,6 +235,15 @@ spawn --agent codex --task "Default cwd" --brief "y"   # no --cwd
 ok  "default cwd: brief written under caller workspace dir" \
       test -f "$WORK4/.orca/briefs/default-cwd.md"
 
+# === Codex readiness requires more than a bare chevron ======================
+WORK7="$TMP/repo-codex-chevron"; mkdir -p "$WORK7"
+DEFAULT_CWD="$WORK7"; SCENARIO=codex-chevron-only; POLLS=3
+spawn --agent codex --task "Chevron only" --brief "z"
+POLLS=30
+ok  "codex chevron-only: exits non-zero"       rc_not 0
+ok  "codex chevron-only: status=error"         eq "$(field status)" error
+ok  "codex chevron-only: error mentions ready" mentions readiness
+
 # === forced readiness failure leaves the tab open =========================
 WORK5="$TMP/repo-fail"; mkdir -p "$WORK5"
 DEFAULT_CWD="$WORK5"; SCENARIO=never-ready; POLLS=3
@@ -201,6 +255,14 @@ ok  "readiness fail: reports surface UUID"    eq "$(field surface)" "$SURFACE"
 ok  "readiness fail: error mentions readiness" mentions readiness
 ok  "readiness fail: stderr names the surface UUID" mentions_err "$SURFACE"
 no  "readiness fail: tab left open (no close)" called_subcommand close-surface
+
+# === read-screen errors are reported directly ==============================
+WORK9="$TMP/repo-read-error"; mkdir -p "$WORK9"
+DEFAULT_CWD="$WORK9"; SCENARIO=read-screen-error
+spawn --agent claude --task "Read error" --brief "z"
+ok  "read-screen error: exits non-zero"       rc_not 0
+ok  "read-screen error: status=error"         eq "$(field status)" error
+ok  "read-screen error: reports read failure" mentions "failed to read worker screen"
 
 # === forced mode failure leaves the tab open ==============================
 WORK6="$TMP/repo-stuck"; mkdir -p "$WORK6"
@@ -216,8 +278,25 @@ no  "mode fail: tab left open (no close)"    called_subcommand close-surface
 DEFAULT_CWD="$WORK"; SCENARIO=claude
 spawn --agent bogus --task "X" --brief "y"
 ok  "unknown agent: exits non-zero"        rc_not 0
+ok  "unknown agent: status=error"          eq "$(field status)" error
 no  "unknown agent: no tab created"        called_subcommand new-surface
 ok  "unknown agent: error names the agent" mentions bogus
+
+# === missing option values fail instead of hanging =========================
+DEFAULT_CWD="$WORK"; SCENARIO=claude
+ok  "missing option value: command finishes" spawn_must_finish 1 --agent
+ok  "missing option value: exits non-zero"   rc_not 0
+ok  "missing option value: status=error"     eq "$(field status)" error
+
+# === brief inputs are mutually exclusive ===================================
+BRIEF_FILE="$TMP/brief-file.md"
+printf 'from file\n' > "$BRIEF_FILE"
+DEFAULT_CWD="$WORK"; SCENARIO=claude
+spawn --agent claude --task "Two briefs" --brief "inline" --brief-file "$BRIEF_FILE"
+ok  "two briefs: exits non-zero"   rc_not 0
+ok  "two briefs: status=error"     eq "$(field status)" error
+no  "two briefs: no tab created"   called_subcommand new-surface
+ok  "two briefs: explains choice"  mentions "exactly one"
 
 # === cmux unreachable fails before creating a tab ==========================
 DEFAULT_CWD="$WORK"; SCENARIO=cmux-down

@@ -107,6 +107,11 @@ assert_args "create-tab emits verified new-surface command" \
   new-surface --type terminal --workspace "$WS" --focus false --id-format both
 assert_eq "create-tab returns parsed surface UUID" "$SFC" "$out"
 
+# create-tab can set the terminal working directory without shell-quoting tricks.
+orca create-tab --workspace "$WS" --cwd "/tmp/project with spaces" >/dev/null
+assert_args "create-tab passes cwd as working-directory" \
+  new-surface --type terminal --workspace "$WS" --working-directory "/tmp/project with spaces" --focus false --id-format both
+
 # send emits the verified send command, text addressed by surface UUID.
 orca send --surface "$SFC" "echo hello" >/dev/null
 assert_args "send emits verified send command" \

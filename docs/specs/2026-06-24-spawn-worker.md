@@ -34,7 +34,7 @@ For one task, the orchestrator (through the skill and `orca-spawn`) does this in
 1. Resolve the calling workspace UUID (`cmux identify --json --id-format both`) and the working directory. Default the cwd to the calling workspace's directory, allow an explicit override.
 2. Generate a task id, a kebab slug from the task title.
 3. Write the brief to `<cwd>/.orca/briefs/<task-id>.md`. Ensure `.orca/` is listed in `<cwd>/.gitignore`, adding it if missing.
-4. Create the worker tab with `cmux new-surface --type terminal --workspace <calling-workspace-uuid> --focus false --id-format both` and capture the worker surface UUID from the parenthesised value. Every later command targets this UUID.
+4. Create the worker tab with `cmux new-surface --type terminal --workspace <calling-workspace-uuid> --working-directory <cwd> --focus false --id-format both` and capture the worker surface UUID from the parenthesised value. Every later command targets this UUID.
 5. Launch the agent with the adapter's launch command, `cmux send --surface <uuid> "<launch>"` then `cmux send-key --surface <uuid> enter`.
 6. Poll `cmux read-screen --surface <uuid> --lines 40` until the adapter's readiness marker appears, with a timeout.
 7. If the adapter has a mode step, cycle it. For Claude, while the footer does not contain `auto mode on`, send `cmux send-key --surface <uuid> "shift+tab"` and re-read, up to five attempts, then fail. For Codex there is no mode step.
@@ -65,7 +65,7 @@ Two adapters, inline as a per-agent function or case block for now, extractable 
 
 ## Error handling
 
-On any failure (readiness marker never appears within the timeout, mode never reaches `auto mode on` within five attempts, the agent binary is missing, or cmux is unreachable), orca reports a clear error that includes the worker surface UUID, and leaves the tab open so the human can flip to it and see what happened. Orca does not close the tab on failure, that would destroy the evidence.
+On any failure, `orca-spawn` emits `status=error` and an `error=` reason. After the worker tab exists (for example, readiness marker never appears within the timeout, mode never reaches `auto mode on` within five attempts, or the agent binary is missing), the error includes the worker surface UUID and leaves the tab open so the human can flip to it and see what happened. Orca does not close the tab on post-launch failure, that would destroy the evidence. Pre-launch failures such as invalid arguments or unreachable cmux fail before creating a tab.
 
 ## Defaults
 
