@@ -46,6 +46,7 @@ ok "Codex plugin includes orca-agent skill" test -f "$REPO_ROOT/$(json_get "$PLU
 
 ok "Codex marketplace exists" test -f "$MARKETPLACE"
 ok "Codex marketplace is valid JSON" valid_json "$MARKETPLACE"
+ok "Codex marketplace uses owner namespace" eq "$(json_get "$MARKETPLACE" '.name')" "chrisedwards"
 ok "Codex marketplace exposes the orca plugin" eq "$(json_get "$MARKETPLACE" '.plugins[] | select(.name == "orca") | .name')" "orca"
 ok "Codex marketplace uses Git URL source" eq "$(json_get "$MARKETPLACE" '.plugins[] | select(.name == "orca") | .source.source')" "url"
 ok "Codex marketplace points at the repository" eq "$(json_get "$MARKETPLACE" '.plugins[] | select(.name == "orca") | .source.url')" "https://github.com/ChrisEdwards/orca.git"

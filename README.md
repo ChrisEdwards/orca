@@ -17,12 +17,12 @@ codex plugin marketplace add ChrisEdwards/orca --ref main
 Then install the plugin:
 
 ```bash
-codex plugin add orca@orca
+codex plugin add orca --marketplace chrisedwards
 ```
 
 In the Codex app, add a plugin marketplace with source
-`ChrisEdwards/orca`, Git ref `main`, and no sparse paths. Select the Orca
-marketplace, then install the `orca` plugin.
+`ChrisEdwards/orca`, Git ref `main`, and no sparse paths. Select the
+Chris Edwards marketplace, then install the `orca` plugin.
 
 ## Local Authoring
 
@@ -55,7 +55,7 @@ configuration:
 tmp_home=$(mktemp -d)
 HOME="$tmp_home" codex plugin marketplace add "$PWD" --json
 HOME="$tmp_home" codex plugin list --available --json
-HOME="$tmp_home" codex plugin add orca@orca --json
+HOME="$tmp_home" codex plugin add orca --marketplace chrisedwards --json
 rm -rf "$tmp_home"
 ```
 
@@ -63,4 +63,4 @@ If the install step fails with `fatal: could not read Username for
 'https://github.com': terminal prompts disabled`, the marketplace is visible
 but the GitHub source cannot be cloned non-interactively. Authenticate GitHub
 access for `https://github.com/ChrisEdwards/orca.git` or make the repository
-public, then rerun `codex plugin add orca@orca --json`.
+public, then rerun `codex plugin add orca --marketplace chrisedwards --json`.
