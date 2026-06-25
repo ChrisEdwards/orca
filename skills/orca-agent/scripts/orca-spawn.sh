@@ -34,8 +34,8 @@
 set -uo pipefail
 
 BIN_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-ORCA_CMUX="$BIN_DIR/orca-cmux"
-ORCA_ADAPTER="$BIN_DIR/orca-adapter"
+ORCA_CMUX="$BIN_DIR/orca-cmux.sh"
+ORCA_ADAPTER="$BIN_DIR/orca-adapter.sh"
 
 export CMUX_BIN=${CMUX_BIN:-cmux}
 

@@ -18,16 +18,16 @@ fail() { FAIL=$((FAIL + 1)); printf 'FAIL: %s\n' "$1" >&2; }
 ok() { local desc=$1; shift; if "$@"; then pass; else fail "$desc"; fi; }
 eq() { [[ "$1" == "$2" ]]; }
 
-for script in orca-adapter orca-cmux orca-spawn; do
+for script in orca-adapter.sh orca-cmux.sh orca-spawn.sh; do
   path="$SKILL_DIR/scripts/$script"
   ok "$script: exists in skill scripts" test -f "$path"
   ok "$script: is executable" test -x "$path"
   ok "$script: bash syntax is valid" bash -n "$path"
 done
 
-list=$("$SKILL_DIR/scripts/orca-adapter" list 2>/dev/null)
+list=$("$SKILL_DIR/scripts/orca-adapter.sh" list 2>/dev/null)
 ok "bundled adapter lists known agents" eq "$list" $'claude\ncodex'
-ok "skill instructions point at bundled spawn script" grep -qF "scripts/orca-spawn" "$SKILL_DIR/SKILL.md"
+ok "skill instructions point at bundled spawn script" grep -qF "scripts/orca-spawn.sh" "$SKILL_DIR/SKILL.md"
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [[ "$FAIL" -eq 0 ]]

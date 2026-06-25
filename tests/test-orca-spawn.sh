@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Integration tests for bin/orca-spawn.
+# Integration tests for bin/orca-spawn.sh.
 #
 # orca-spawn drives the full spawn sequence (resolve workspace, write brief,
 # create tab, launch, poll readiness, cycle mode, deliver brief, confirm). These
@@ -13,7 +13,7 @@ set -uo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
-SPAWN="$REPO_ROOT/bin/orca-spawn"
+SPAWN="$REPO_ROOT/bin/orca-spawn.sh"
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
