@@ -9,7 +9,7 @@ The single Claude Code session the human talks to. It spawns workers, hands them
 _Avoid_ controller, master, supervisor, driver
 
 **Worker**
-A running AI coding agent instance launched by the orchestrator in its own tab to carry out one task.
+A task-bearing agent instance launched by the orchestrator in its own tab to carry out one task.
 _Avoid_ sub-agent, child, bare "agent" when an instance is meant
 
 ## Agents
@@ -17,6 +17,9 @@ _Avoid_ sub-agent, child, bare "agent" when an instance is meant
 **Agent type**
 A kind of AI coding agent orca can launch, such as Claude Code or Codex. Distinct from a worker, which is a running instance of an agent type.
 _Avoid_ "agent" on its own, which blurs into worker
+
+**Agent instance**
+A live running instance of an agent type in an Orca-managed surface. An agent instance may simply expose a forked conversation, or it may become a worker when assigned a task.
 
 **Adapter**
 The configuration describing how to launch, drive, detect, and exit one agent type. Adding support for a new agent type means adding an adapter.
@@ -44,6 +47,10 @@ A single terminal (or markdown or browser view) inside a pane. A worker occupies
 The human-facing label for a surface within a pane. Adding a worker means adding a tab to the shared workspace, and "spawn a pane" in casual terms means this.
 
 ## Work
+
+**Conversation**
+A provider-owned transcript and history for one AI coding agent interaction. Codex may call it a thread and Claude Code may call it a session; Orca uses conversation when the concept must work across agent types.
+_Avoid_ thread or session in Orca-level language unless referring to a provider-specific identifier
 
 **Task**
 A single piece of work handed to one worker in its own tab. The standalone, ad-hoc case is a task on its own.
@@ -78,3 +85,6 @@ Orca's central action, create a worker tab, launch the agent, bring it to the ri
 
 **Fire and confirm**
 The spawn behavior where orca verifies the worker came up and reached the right mode, then delivers the brief and stops. It does not monitor the worker afterward. Contrast with later monitoring behavior that watches a worker through to completion.
+
+**Fork**
+Create a new conversation by branching an existing conversation, then open that branch in its own tab. Unlike spawn, a fork preserves prior conversation history instead of starting from a fresh brief.

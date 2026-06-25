@@ -16,6 +16,12 @@ When implementing a bead:
 
 Use conventional commits
 
+## Reflection
+
+When you make a mistake and overcome it, update your AGENTS.md or relavent SKILL.md files to ensure you don't repeat that mistake next time. Keep this under the `## Learnings` header.  Keep these concise, but ensure they are rich enough to be effective.
+
+You can also add meaningful learnings that you learn along the way. 
+
 ## Skill Packaging
 
 Skills must be self-contained. Runtime files a skill needs belong inside that
