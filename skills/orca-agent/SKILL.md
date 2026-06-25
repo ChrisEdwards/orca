@@ -39,7 +39,7 @@ scripts/orca-spawn.sh --agent claude --task "Fix the login redirect" \
   --brief-file /tmp/brief.md --cwd ~/projects/app
 ```
 
-Resolve `scripts/orca-spawn.sh` relative to this skill directory. In an orca repo checkout, `bin/orca-spawn.sh` is also available as a compatibility wrapper.
+Resolve `scripts/orca-spawn.sh` relative to this skill directory.
 
 ## Report back
 

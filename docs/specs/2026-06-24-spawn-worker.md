@@ -55,7 +55,7 @@ Two adapters, inline as a per-agent function or case block for now, extractable 
 ## Components
 
 - **cmux-interface helper script.** Wraps create-tab, send, send-key, read-screen, close, and list. Accepts and returns UUIDs. This is the seam a future tmux backend would replace.
-- **orca-spawn routine.** Runs the spawn sequence above using the interface helper and the adapters. Owns the brief file and `.gitignore` handling. The distributable implementation lives under `skills/orca-agent/scripts/`, with repo-root `bin/orca-*` wrappers for local checkout convenience.
+- **orca-spawn routine.** Runs the spawn sequence above using the interface helper and the adapters. Owns the brief file and `.gitignore` handling. The implementation lives under `skills/orca-agent/scripts/` so the skill package is self-contained.
 - **Inline adapters.** Claude and Codex definitions as described.
 - **orca-agent skill.** The thin conversational surface. The orchestrator invokes it with an agent type, a task, and an optional cwd, and it calls the bundled `scripts/orca-spawn.sh`.
 
