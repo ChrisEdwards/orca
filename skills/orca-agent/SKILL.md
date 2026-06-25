@@ -24,6 +24,12 @@ Require these external CLIs on `PATH`:
 - **brief** — a self-contained description of the task. The worker starts fresh with no conversation history, so include what to do, any constraints, and how it will know it is done. Construct this from the user's request.
 - **cwd** — optional. Defaults to the calling workspace's directory. Pass `--cwd` only to override.
 
+## Worker artifacts and handoffs
+
+For worker findings, default to the worker's final response in its tab. Do not ask the worker to write reports, findings, logs, status files, or handoff files anywhere in the repo where they can be checked in.
+
+If a durable handoff or artifact is genuinely useful, put it outside the repo under `${TMPDIR:-/tmp}/orca/<task-id>/`, and report the absolute path back to the human. The `.orca/briefs/` directory is only for Orca's internal brief delivery and is gitignored by `orca-spawn`; `.orca-*` files are different paths and are not covered by that rule.
+
 ## Run it
 
 Single-line brief:

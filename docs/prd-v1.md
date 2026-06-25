@@ -30,7 +30,7 @@ The human interacts with orca by talking to their Claude Code session (the orche
 
 6a. As a developer, I want common operations (file reads, git commands, builds, tests) pre-allowed via allowlists, so that worker agents can make progress on routine work without constant permission approvals.
 
-7. As a developer, I want context passed between workflow steps via files in a `.orca/` directory that is gitignored, so that handoff artifacts don't pollute the target repo's commit history.
+7. As a developer, I want context passed between workflow steps via files under the system temp directory, so that handoff artifacts never land in target repo paths that can be checked in.
 
 8. As a developer, I want to define workflows where the review step loops until only low-severity or note-level findings remain, so that code quality gates are enforced automatically.
 
@@ -107,24 +107,24 @@ A Claude Code skill (`orca-workflow`) that runs multi-step workflows.
 - Accepts a workflow definition: an ordered list of steps, each specifying an agent type and a brief template.
 - Executes steps sequentially. For each step: construct the brief (incorporating context from previous steps), spawn the agent, wait for completion, collect results.
 - Supports loops: the review-fix cycle repeats until a condition is met (e.g., review findings are all low/note severity).
-- Reads handoff artifacts from `.orca/handoff/` to pass context between steps.
+- Reads handoff artifacts from `${TMPDIR:-/tmp}/orca/<workflow-or-task-id>/handoff/` to pass context between steps.
 - The brief for each step is written to `.orca/briefs/` for debugging and auditability.
 - Reports workflow status to the human (which step is running, what happened, what's next).
 
 The workflow definition format will start simple (could be inline in the skill invocation or a YAML/JSON file) and evolve as usage patterns emerge.
 
-### Module 5: `.orca/` State Directory
+### Module 5: Orca State Locations
 
-A gitignored directory in the target repo for orchestration artifacts.
+Orca separates repo-local internal delivery state from worker-produced handoff artifacts.
 
-- `.orca/briefs/` - Brief files sent to each agent per step.
-- `.orca/handoff/` - Artifacts produced by one step for consumption by the next (review findings, implementation notes, PR URLs).
-- `.orca/` is added to the target repo's `.gitignore` by the orchestrator if not already present.
+- `.orca/briefs/` - Internal brief files sent to each agent per step. This directory is added to the target repo's `.gitignore` by the orchestrator if not already present.
+- `${TMPDIR:-/tmp}/orca/<workflow-or-task-id>/handoff/` - Handoff artifacts produced by one step for consumption by the next (review findings, implementation notes, PR URLs).
+- `${TMPDIR:-/tmp}/orca/<workflow-or-task-id>/artifacts/` - Other worker-produced scratch artifacts that should not be committed.
 
 ### Context Passing Strategy
 
 - The git branch is the shared workspace for code changes. All agents in a workflow operate on the same branch.
-- Non-code context (review findings, metadata, step outputs) is passed via files in `.orca/handoff/`.
+- Non-code context (review findings, metadata, step outputs) is passed via files under `${TMPDIR:-/tmp}/orca/<workflow-or-task-id>/handoff/`.
 - Each agent receives a fresh brief constructed by the orchestrator. No conversation history is passed between agents.
 - This follows Anthropic's own pattern for sub-agent context: externalized state, path-addressable, compaction-stable.
 

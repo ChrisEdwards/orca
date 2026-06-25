@@ -55,6 +55,9 @@ ok "bundled adapter lists known agents" eq "$list" $'claude\ncodex'
 fork_list=$("$FORK_SKILL_DIR/scripts/orca-fork-adapter.sh" list 2>/dev/null)
 ok "bundled fork adapter lists known providers" eq "$fork_list" $'codex\nclaude'
 ok "orca-agent instructions point at bundled spawn script" grep -qF "scripts/orca-spawn.sh" "$AGENT_SKILL_DIR/SKILL.md"
+ok "orca-agent instructions forbid check-in-able handoff files" grep -qF "Do not ask the worker to write reports, findings, logs, status files, or handoff files anywhere in the repo where they can be checked in." "$AGENT_SKILL_DIR/SKILL.md"
+ok "orca-agent instructions prefer final response for worker findings" grep -qF "For worker findings, default to the worker's final response in its tab." "$AGENT_SKILL_DIR/SKILL.md"
+ok "orca-agent instructions route durable artifacts to tmp" grep -qF 'If a durable handoff or artifact is genuinely useful, put it outside the repo under `${TMPDIR:-/tmp}/orca/<task-id>/`, and report the absolute path back to the human.' "$AGENT_SKILL_DIR/SKILL.md"
 ok "orca-fork instructions point at bundled fork script" grep -qF "scripts/orca-fork.sh" "$FORK_SKILL_DIR/SKILL.md"
 ok "orca-msg instructions point at bundled message script" grep -qF "scripts/orca-msg.sh" "$MSG_SKILL_DIR/SKILL.md"
 ok "Codex orca-agent project skill entry exists" test -L "$CODEX_AGENT_SKILL_LINK"

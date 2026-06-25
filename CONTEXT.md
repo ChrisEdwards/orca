@@ -75,7 +75,7 @@ One task that forms a single stage of a workflow, pairing an agent type with a b
 An ordered sequence of steps the orchestrator runs, where each step may use a different agent type. A Layer 2 concept, out of scope for the first deliverable.
 
 **Handoff**
-Non-code context one step produces for the next, passed through files rather than conversation. The git branch carries code changes, handoff files carry everything else.
+Non-code context one step produces for the next, passed through files rather than conversation. The git branch carries code changes, handoff files carry everything else. For ad-hoc spawned workers, handoff files live outside the repo under `${TMPDIR:-/tmp}/orca/<task-id>/`, never in tracked repo paths.
 _Avoid_ context passing, state transfer
 
 ## Detection

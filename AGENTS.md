@@ -41,6 +41,7 @@ document it as a prerequisite.
 
 - The `orca-cmux.sh` copy-parity test only guarantees the shared cmux seam stays byte-for-byte identical. `orca-spawn.sh` and `orca-fork.sh` are not copied files; shared user-facing behavior across them needs explicit behavior tests in both suites.
 - `br create` does not accept `--acceptance`; create the bead first, then use `br update <id> --acceptance-criteria="$criteria"` for acceptance criteria.
+- Worker findings should default to the worker's final response. If a durable handoff or artifact is needed, use `${TMPDIR:-/tmp}/orca/<task-id>/`, never paths inside the repo that can be checked in.
 
 <!-- br-agent-instructions-v1 -->
 
