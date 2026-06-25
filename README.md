@@ -1,10 +1,15 @@
 # Orca
 
-Orca packages skills for spawning Claude Code or Codex workers in cmux tabs.
+Orca packages skills for spawning and forking Claude Code or Codex agent
+instances in cmux tabs.
 
-The current plugin includes the `orca-agent` skill, which launches one worker
-for one task, waits for the worker to reach its ready state, gives it a
-self-contained brief, and reports the resulting cmux surface.
+The plugin includes two skills:
+
+- `orca-agent` launches one worker for one task, waits for the worker to reach
+  its ready state, gives it a self-contained brief, and reports the resulting
+  cmux surface.
+- `orca-fork` forks an existing Codex or Claude Code conversation into a new
+  cmux tab, preserving conversation history, and reports the resulting surface.
 
 ## Install In Codex
 
@@ -26,10 +31,10 @@ Chris Edwards marketplace, then install the `orca` plugin.
 
 ## Local Authoring
 
-The canonical skills live under `skills/`. The project-skill symlink at
-`.agents/skills/orca-agent` is kept only for repo-local Codex discovery while
-developing Orca itself. Plugin installation uses `.codex-plugin/plugin.json`,
-which packages every skill under `skills/`.
+The canonical skills live under `skills/`. The project-skill symlinks under
+`.agents/skills/` are kept only for repo-local Codex discovery while developing
+Orca itself. Plugin installation uses `.codex-plugin/plugin.json`, which
+packages every skill under `skills/`.
 
 Each skill must remain self-contained. Runtime files used by a skill belong
 inside that skill directory, such as `skills/orca-agent/scripts/`.
@@ -92,8 +97,9 @@ For one session while developing locally, load the plugin directly:
 claude --plugin-dir . --print "List available Orca skills."
 ```
 
-Claude Code namespaces plugin skills by plugin name. The current skill is
-available as `/orca:orca-agent` after the plugin is installed or loaded.
+Claude Code namespaces plugin skills by plugin name. The current skills are
+available as `/orca:orca-agent` and `/orca:orca-fork` after the plugin is
+installed or loaded.
 
 Validate the Claude plugin and marketplace manifests:
 
