@@ -60,3 +60,4 @@ A non-zero exit prints `status=error` with an `error=` reason and, when the tab 
 - One task, one worker, no monitoring afterward. This is fire and confirm.
 - No worker registry or monitoring state is persisted. Brief files are written under `.orca/briefs/`, and `orca-spawn` ensures `.orca/` is gitignored.
 - The worker opens in the calling workspace, the one this session was fired from.
+- If Claude asks to trust the worker cwd before showing its input box, `orca-spawn` selects the Yes option and continues waiting for readiness.

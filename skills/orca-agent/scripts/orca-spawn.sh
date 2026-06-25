@@ -90,6 +90,20 @@ read_worker_screen() {
   printf '%s\n' "$out"
 }
 
+maybe_accept_trust_prompt() {
+  local screen=$1
+  if (grep -qF -- "Is this a project you trust?" <<<"$screen" \
+      || grep -qF -- "Do you trust the contents of this directory?" <<<"$screen") \
+    && grep -qiE -- '(^|[[:space:]])1[.)]?[[:space:]]+Yes([[:space:]]|$)' <<<"$screen"; then
+    "$ORCA_CMUX" send --surface "$SURFACE" "1" >/dev/null \
+      || spawn_fail "failed to answer the trust prompt"
+    "$ORCA_CMUX" send-key --surface "$SURFACE" enter >/dev/null \
+      || spawn_fail "failed to submit the trust prompt answer"
+    return 0
+  fi
+  return 1
+}
+
 # Fail after the worker tab exists: leave it open, name the surface, exit 1.
 spawn_fail() {
   local msg=$1
@@ -206,6 +220,10 @@ SURFACE=$("$ORCA_CMUX" create-tab --workspace "$ws" --cwd "$CWD" 2>/dev/null) \
 ready=0
 for ((p = 0; p < ORCA_READY_POLLS; p++)); do
   screen=$(read_worker_screen)
+  if maybe_accept_trust_prompt "$screen"; then
+    sleep "$ORCA_POLL_INTERVAL"
+    continue
+  fi
   if is_ready "$screen"; then ready=1; break; fi
   sleep "$ORCA_POLL_INTERVAL"
 done

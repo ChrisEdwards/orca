@@ -35,6 +35,8 @@ sub=${1:-}; shift || true
 
 keyfile="$FAKE_STATE/keycount"
 launched="$FAKE_STATE/launched"
+trust_selected="$FAKE_STATE/trust-selected"
+trusted="$FAKE_STATE/trusted"
 kc=0; [[ -f "$keyfile" ]] && kc=$(cat "$keyfile")
 
 case "$sub" in
@@ -50,18 +52,36 @@ case "$sub" in
     ;;
   rename-tab) echo "OK" ;;
   send)
+    payload=""; for a in "$@"; do payload=$a; done
+    [[ "$payload" == "1" ]] && : > "$trust_selected"
     : > "$launched"
     echo "OK surface:43 workspace:9"
     ;;
   send-key)
     key=""; for a in "$@"; do key=$a; done
     [[ "$key" == "shift+tab" ]] && printf '%s' "$((kc + 1))" > "$keyfile"
+    [[ "$key" == "enter" && -f "$trust_selected" ]] && : > "$trusted"
     echo "OK surface:43 workspace:9"
     ;;
   read-screen)
     case "${FAKE_SCENARIO:-}" in
       claude)
         [[ -f "$launched" ]] || { echo "starting Claude Code..."; exit 0; }
+        case $((kc % 4)) in
+          0) echo "  ? for shortcuts                                   ← for agents" ;;
+          1) echo "  ⏵⏵ accept edits on (shift+tab to cycle) ·         ← for agents" ;;
+          2) echo "  ⏸ plan mode on (shift+tab to cycle) ·             ← for agents" ;;
+          3) echo "  ⏵⏵ auto mode on (shift+tab to cycle) ·            ← for agents" ;;
+        esac
+        ;;
+      claude-trust)
+        [[ -f "$launched" ]] || { echo "starting Claude Code..."; exit 0; }
+        if [[ ! -f "$trusted" ]]; then
+          printf '  Is this a project you trust?\n'
+          printf '  1. Yes\n'
+          printf '  2. No\n'
+          exit 0
+        fi
         case $((kc % 4)) in
           0) echo "  ? for shortcuts                                   ← for agents" ;;
           1) echo "  ⏵⏵ accept edits on (shift+tab to cycle) ·         ← for agents" ;;
@@ -133,6 +153,7 @@ spawn() {
 
 field() { grep -E "^$1=" <<<"$LAST_OUT" | head -1 | cut -d= -f2-; }
 count_shift_tabs() { grep -c $'\tshift+tab$' "$CALLS"; }
+count_enter_keys() { grep -c $'\tenter$' "$CALLS"; }
 calls_have() { grep -qF -- "$1" "$CALLS"; }
 calls_have_line() { grep -qxF -- "$1" "$CALLS"; }
 called_subcommand() { grep -qE "^$1(\t|$)" "$CALLS"; }
@@ -189,6 +210,19 @@ ok  "claude: brief file has the brief text" \
 ok  "claude: .orca/ is gitignored"         grep -qxF ".orca/" "$WORK/.gitignore"
 no  "claude: never closes a surface"       called_subcommand close-surface
 ok  "claude: renames the tab"              called_subcommand rename-tab
+
+# === Claude trust prompt is answered before readiness =====================
+WORK_TRUST="$TMP/repo-claude-trust"; mkdir -p "$WORK_TRUST"
+DEFAULT_CWD="$WORK_TRUST"; SCENARIO=claude-trust
+spawn --agent claude --task "Trust this repo" --brief "Proceed after trust."
+
+ok  "claude trust: exits 0"                rc_is 0
+ok  "claude trust: status=ok"              eq "$(field status)" ok
+ok  "claude trust: answered yes"           calls_have_line $'send\t--surface\t'"$SURFACE"$'\t1'
+ok  "claude trust: submitted answer"       eq "$(count_enter_keys)" 3
+ok  "claude trust: reaches auto mode"      eq "$(count_shift_tabs)" 3
+ok  "claude trust: delivers pointer brief" \
+      calls_have "Read .orca/briefs/trust-this-repo.md and carry out the task it describes."
 
 # === Codex happy path ======================================================
 WORK2="$TMP/repo-codex"; mkdir -p "$WORK2"
