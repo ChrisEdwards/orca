@@ -36,8 +36,15 @@ case "$1" in
   read-screen|capture-pane)
     printf 'line one\nline two\n'
     ;;
+  list-workspaces)
+    echo '{ "workspaces": [] }'
+    ;;
   list-pane-surfaces)
-    echo "* surface:35 5DE180A2-FEB8-4733-A750-2681FA2C2982  marker  [selected]"
+    if [[ "$*" == *"--json"* ]]; then
+      echo '{ "surfaces": [] }'
+    else
+      echo "* surface:35 5DE180A2-FEB8-4733-A750-2681FA2C2982  marker  [selected]"
+    fi
     ;;
   *)
     echo "OK surface:43 workspace:9"
@@ -148,6 +155,16 @@ orca list >/dev/null
 assert_args "list emits list-pane-surfaces command" \
   list-pane-surfaces --id-format both
 
+# list-workspaces-json maps to cmux's JSON workspace listing for descriptor resolution.
+orca list-workspaces-json >/dev/null
+assert_args "list-workspaces-json emits JSON workspace listing" \
+  list-workspaces --json --id-format both
+
+# list-surfaces-json maps to cmux's JSON surface listing in one workspace.
+orca list-surfaces-json --workspace "$WS" >/dev/null
+assert_args "list-surfaces-json emits JSON surface listing" \
+  list-pane-surfaces --workspace "$WS" --json --id-format both
+
 # --- UUID-only invariant (ADR 0002) ----------------------------------------
 # Positional refs must be refused at the boundary, before any cmux call, so a
 # drifted ref can never reach a stored or deferred action.
@@ -171,6 +188,13 @@ else
   pass
 fi
 assert_no_cmux_call "create-tab rejects workspace ref before touching cmux"
+
+if orca list-surfaces-json --workspace workspace:9 2>/dev/null; then
+  fail "list-surfaces-json must reject a workspace ref"
+else
+  pass
+fi
+assert_no_cmux_call "list-surfaces-json rejects workspace ref before touching cmux"
 
 # --- error handling --------------------------------------------------------
 if orca send --surface "$SFC" 2>/dev/null; then

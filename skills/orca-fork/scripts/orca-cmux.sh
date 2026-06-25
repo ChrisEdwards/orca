@@ -20,6 +20,8 @@
 #   read-screen --surface <uuid> [--lines N]  read N lines (default 40)
 #   close       --surface <uuid>              close the surface
 #   list                                      list surfaces (for debugging)
+#   list-workspaces-json                      list workspaces in caller window as JSON
+#   list-surfaces-json --workspace <uuid>     list workspace surfaces as JSON
 set -euo pipefail
 
 CMUX_BIN=${CMUX_BIN:-cmux}
@@ -63,7 +65,7 @@ create_tab() {
 }
 
 cmd=${1:-}
-[[ -n "$cmd" ]] || die "usage: orca-cmux <create-tab|send|send-key|read-screen|close|list> [options]"
+[[ -n "$cmd" ]] || die "usage: orca-cmux <create-tab|send|send-key|read-screen|close|list|list-workspaces-json|list-surfaces-json> [options]"
 shift
 
 case "$cmd" in
@@ -131,6 +133,23 @@ case "$cmd" in
   list)
     (($# == 0)) || die "list: takes no arguments"
     cmux_exec list-pane-surfaces --id-format both
+    ;;
+
+  list-workspaces-json)
+    (($# == 0)) || die "list-workspaces-json: takes no arguments"
+    cmux_exec list-workspaces --json --id-format both
+    ;;
+
+  list-surfaces-json)
+    ws=""
+    while (($#)); do
+      case "$1" in
+        --workspace) need_value list-surfaces-json --workspace $#; ws=$2; shift 2 ;;
+        *) die "list-surfaces-json: unexpected argument: $1" ;;
+      esac
+    done
+    require_uuid workspace "$ws"
+    cmux_exec list-pane-surfaces --workspace "$ws" --json --id-format both
     ;;
 
   *)

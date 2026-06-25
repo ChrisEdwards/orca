@@ -1,15 +1,18 @@
 # Orca
 
-Orca packages skills for spawning and forking Claude Code or Codex agent
-instances in cmux tabs.
+Orca packages skills for spawning, forking, and messaging Claude Code or Codex
+agent instances in cmux tabs.
 
-The plugin includes two skills:
+The plugin includes three skills:
 
 - `orca-agent` launches one worker for one task, waits for the worker to reach
   its ready state, gives it a self-contained brief, and reports the resulting
   cmux surface.
 - `orca-fork` forks an existing Codex or Claude Code conversation into a new
   cmux tab, preserving conversation history, and reports the resulting surface.
+- `orca-msg` delivers a follow-up message to an existing agent instance in a
+  cmux surface, using either a pasted `surface_id` or a human target
+  description that resolves to one surface.
 
 ## Install In Codex
 
@@ -98,8 +101,8 @@ claude --plugin-dir . --print "List available Orca skills."
 ```
 
 Claude Code namespaces plugin skills by plugin name. The current skills are
-available as `/orca:orca-agent` and `/orca:orca-fork` after the plugin is
-installed or loaded.
+available as `/orca:orca-agent`, `/orca:orca-fork`, and `/orca:orca-msg` after
+the plugin is installed or loaded.
 
 Validate the Claude plugin and marketplace manifests:
 

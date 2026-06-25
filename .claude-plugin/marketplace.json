@@ -10,7 +10,7 @@
   "plugins": [
     {
       "name": "orca",
-      "description": "Spawn Claude Code or Codex workers in cmux tabs.",
+      "description": "Spawn, fork, or message Claude Code or Codex workers in cmux tabs.",
       "author": {
         "name": "Chris Edwards"
       },
