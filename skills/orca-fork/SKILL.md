@@ -19,9 +19,11 @@ Require these external CLIs on `PATH`:
 
 ## Inputs to gather from the conversation
 
-- **source conversation** — normally inferred from the current Codex session through `CODEX_THREAD_ID`; otherwise use a provider-specific explicit id:
+- **source conversation** — normally inferred from the calling conversation's own process-local environment. Codex exports `CODEX_THREAD_ID`, Claude Code exports `CLAUDE_CODE_SESSION_ID`, so forking the current conversation needs no source argument for either provider. Override with a provider-specific explicit id when forking a different conversation:
   - `--codex-thread-id <uuid>`
   - `--claude-session-id <uuid>`
+
+  `CLAUDE_CODE_SESSION_ID` is undocumented but verified on Claude Code 2.1.191, and is an exact, per-session value inherited by the shell, not a recency guess. If both auto sources are present the script refuses to guess and asks for an explicit id. Only invoke this skill from the main loop: a subagent's shell may carry the subagent's own session id.
 - **prompt** — optional. If provided, it is passed at launch as the first turn in the forked conversation.
 - **title** — optional tab title. If omitted, the script derives one.
 
@@ -29,13 +31,13 @@ Do not ask for an agent type separately from the source id. Conversation ids are
 
 ## Run it
 
-Fork the current Codex conversation without starting a new turn:
+Fork the current conversation (Codex or Claude Code) without starting a new turn:
 
 ```bash
 scripts/orca-fork.sh
 ```
 
-Fork an explicit Claude session:
+Fork a different, explicit Claude session:
 
 ```bash
 scripts/orca-fork.sh --claude-session-id <uuid>

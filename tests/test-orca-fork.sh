@@ -111,15 +111,20 @@ LAST_OUT=""
 LAST_ERR=""
 LAST_RC=0
 AUTO_CODEX=""
+AUTO_CLAUDE=""
 
 fork_run() {
   : > "$CALLS"
   rm -rf "$STATE"; mkdir -p "$STATE"
   local errfile="$TMP/stderr"
+  # Pin both provider auto-source vars so the runner's real environment (these
+  # tests run inside a Claude Code session, which exports CLAUDE_CODE_SESSION_ID)
+  # can never leak into the script under test.
   LAST_OUT=$(CMUX_BIN="$FAKE" FAKE_CALLS="$CALLS" FAKE_STATE="$STATE" \
     FAKE_SURFACE="$SURFACE" FAKE_WS="$WS" FAKE_CWD="$DEFAULT_CWD" \
     FAKE_SCENARIO="$SCENARIO" ORCA_READY_POLLS="$POLLS" ORCA_POLL_INTERVAL=0 \
-    CODEX_THREAD_ID="$AUTO_CODEX" "$FORK" "$@" 2>"$errfile")
+    CODEX_THREAD_ID="$AUTO_CODEX" CLAUDE_CODE_SESSION_ID="$AUTO_CLAUDE" \
+    "$FORK" "$@" 2>"$errfile")
   LAST_RC=$?
   LAST_ERR=$(cat "$errfile")
 }
@@ -184,6 +189,38 @@ ok  "claude explicit: provider=claude"      eq "$(field provider)" claude
 ok  "claude explicit: default tab name"     eq "$(field tab)" "fork-claude"
 ok  "claude explicit: launch command" \
       calls_have_line $'send\t--surface\t'"$SURFACE"$'\tclaude --resume '"$CLAUDE_ID"$' --fork-session'
+
+# === Claude auto source via CLAUDE_CODE_SESSION_ID =========================
+WORK_CLAUDE_AUTO="$TMP/repo-claude-auto"; mkdir -p "$WORK_CLAUDE_AUTO"
+DEFAULT_CWD="$WORK_CLAUDE_AUTO"; SCENARIO=claude; AUTO_CODEX=""; AUTO_CLAUDE="$CLAUDE_ID"
+fork_run
+AUTO_CLAUDE=""
+
+ok  "claude auto: exits 0"                   rc_is 0
+ok  "claude auto: status=ok"                 eq "$(field status)" ok
+ok  "claude auto: provider=claude"           eq "$(field provider)" claude
+ok  "claude auto: source conversation"       eq "$(field source_conversation)" "$CLAUDE_ID"
+ok  "claude auto: default tab name"          eq "$(field tab)" "fork-claude"
+ok  "claude auto: no prompt sent"            eq "$(field prompt_sent)" false
+ok  "claude auto: launch command" \
+      calls_have_line $'send\t--surface\t'"$SURFACE"$'\tclaude --resume '"$CLAUDE_ID"$' --fork-session'
+
+# === Explicit flag wins over a present auto env var ========================
+DEFAULT_CWD="$WORK"; SCENARIO=codex; AUTO_CODEX=""; AUTO_CLAUDE="$CLAUDE_ID"
+fork_run --codex-thread-id "$CODEX_ID"
+AUTO_CLAUDE=""
+ok  "explicit wins: exits 0"                 rc_is 0
+ok  "explicit wins: provider=codex"          eq "$(field provider)" codex
+ok  "explicit wins: source is codex id"      eq "$(field source_conversation)" "$CODEX_ID"
+
+# === Both auto env sources present is ambiguous ============================
+DEFAULT_CWD="$WORK"; SCENARIO=codex; AUTO_CODEX="$CODEX_ID"; AUTO_CLAUDE="$CLAUDE_ID"
+fork_run
+AUTO_CLAUDE=""
+ok  "both auto: exits non-zero"              rc_not 0
+ok  "both auto: status=error"                eq "$(field status)" error
+ok  "both auto: actionable"                  mentions "--claude-session-id"
+no  "both auto: no tab created"              called_subcommand new-surface
 
 # === Prompt file supports multiline prompt-at-launch =======================
 PROMPT_FILE="$TMP/prompt.md"

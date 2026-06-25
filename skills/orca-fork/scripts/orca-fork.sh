@@ -180,10 +180,24 @@ elif ((have_claude == 1)); then
   PROVIDER=claude
   SOURCE_ID=$claude_session_id
 else
+  # Auto-detect the calling conversation from the provider's own process-local
+  # environment variable. Each provider exports its current conversation id into
+  # the shell it spawns, so this is an exact source, not a recency guess: Codex
+  # sets CODEX_THREAD_ID, Claude Code sets CLAUDE_CODE_SESSION_ID. CLAUDE_CODE_SESSION_ID
+  # is undocumented but verified on Claude Code 2.1.191; downstream UUID validation
+  # guards a malformed value, and `claude --resume` itself rejects an id that is not
+  # resolvable from this workspace. Only trust these from the main loop: a subagent's
+  # shell may carry the subagent's own id, so do not invoke orca-fork from inside one.
   auto_codex=${CODEX_THREAD_ID:-}
-  if [[ -n "$auto_codex" ]]; then
+  auto_claude=${CLAUDE_CODE_SESSION_ID:-}
+  if [[ -n "$auto_codex" && -n "$auto_claude" ]]; then
+    die "both CODEX_THREAD_ID and CLAUDE_CODE_SESSION_ID are set; pass --codex-thread-id or --claude-session-id to choose the source"
+  elif [[ -n "$auto_codex" ]]; then
     PROVIDER=codex
     SOURCE_ID=$auto_codex
+  elif [[ -n "$auto_claude" ]]; then
+    PROVIDER=claude
+    SOURCE_ID=$auto_claude
   else
     die "no exact source conversation id found; pass --codex-thread-id or --claude-session-id"
   fi
