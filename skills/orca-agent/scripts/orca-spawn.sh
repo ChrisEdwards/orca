@@ -94,7 +94,7 @@ maybe_accept_trust_prompt() {
   local screen=$1
   if (grep -qF -- "Is this a project you trust?" <<<"$screen" \
       || grep -qF -- "Do you trust the contents of this directory?" <<<"$screen") \
-    && grep -qiE -- '(^|[[:space:]])1[.)]?[[:space:]]+Yes([[:space:]]|$)' <<<"$screen"; then
+    && grep -qiE -- '1[.)]?[[:space:]]+Yes' <<<"$screen"; then
     "$ORCA_CMUX" send --surface "$SURFACE" "1" >/dev/null \
       || spawn_fail "failed to answer the trust prompt"
     "$ORCA_CMUX" send-key --surface "$SURFACE" enter >/dev/null \

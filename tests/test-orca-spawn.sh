@@ -98,6 +98,17 @@ case "$sub" in
         printf '› Implement {feature}\n'
         printf 'gpt-5.5 high · %s\n' "$FAKE_CWD"
         ;;
+      codex-trust)
+        [[ -f "$launched" ]] || { echo "booting codex"; exit 0; }
+        if [[ ! -f "$trusted" ]]; then
+          printf '  Do you trust the contents of this directory?\n'
+          printf '› 1. Yes, continue\n'
+          printf '  2. No, quit\n'
+          exit 0
+        fi
+        printf '› Implement {feature}\n'
+        printf 'gpt-5.5 high · %s\n' "$FAKE_CWD"
+        ;;
       codex-chevron-only)
         [[ -f "$launched" ]] || { echo "booting codex"; exit 0; }
         printf '› shell prompt, not codex\n'
@@ -237,6 +248,19 @@ ok  "codex: delivers pointer brief" \
 ok  "codex: launch sends only codex -p yolo" \
       calls_have_line $'send\t--surface\t'"$SURFACE"$'\tcodex -p yolo'
 ok  "codex: brief file written"         test -f "$WORK2/.orca/briefs/add-unit-tests.md"
+
+# === Codex trust prompt is answered before readiness ======================
+WORK_CODEX_TRUST="$TMP/repo-codex-trust"; mkdir -p "$WORK_CODEX_TRUST"
+DEFAULT_CWD="$WORK_CODEX_TRUST"; SCENARIO=codex-trust
+spawn --agent codex --task "Trust codex repo" --brief "Proceed after trust."
+
+ok  "codex trust: exits 0"                rc_is 0
+ok  "codex trust: status=ok"              eq "$(field status)" ok
+ok  "codex trust: answered yes"           calls_have_line $'send\t--surface\t'"$SURFACE"$'\t1'
+ok  "codex trust: submitted answer"       eq "$(count_enter_keys)" 3
+ok  "codex trust: no mode step"           eq "$(count_shift_tabs)" 0
+ok  "codex trust: delivers pointer brief" \
+      calls_have "Read .orca/briefs/trust-codex-repo.md and carry out the task it describes."
 
 # === gitignore is not duplicated when already present ======================
 WORK3="$TMP/repo-gi"; mkdir -p "$WORK3"

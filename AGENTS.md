@@ -37,6 +37,10 @@ each skill over introducing a shared runtime path. If the helper is too large or
 needs one source of truth, promote it to a separately installed external CLI and
 document it as a prerequisite.
 
+## Learnings
+
+- The `orca-cmux.sh` copy-parity test only guarantees the shared cmux seam stays byte-for-byte identical. `orca-spawn.sh` and `orca-fork.sh` are not copied files; shared user-facing behavior across them needs explicit behavior tests in both suites.
+
 <!-- br-agent-instructions-v1 -->
 
 ---

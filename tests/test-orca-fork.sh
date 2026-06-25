@@ -80,6 +80,16 @@ case "$sub" in
         [[ -f "$launched" ]] || { echo "starting Claude Code..."; exit 0; }
         echo "  ? for shortcuts                                   ← for agents"
         ;;
+      claude-trust)
+        [[ -f "$launched" ]] || { echo "starting Claude Code..."; exit 0; }
+        if [[ ! -f "$trusted" ]]; then
+          printf '  Is this a project you trust?\n'
+          printf '  1. Yes\n'
+          printf '  2. No\n'
+          exit 0
+        fi
+        echo "  ? for shortcuts                                   ← for agents"
+        ;;
       never-ready)
         echo "loading, please wait..."
         ;;
@@ -130,6 +140,7 @@ fork_run() {
 }
 
 field() { grep -E "^$1=" <<<"$LAST_OUT" | head -1 | cut -d= -f2-; }
+count_enter_keys() { grep -c $'\tenter$' "$CALLS"; }
 calls_have() { grep -qF -- "$1" "$CALLS"; }
 calls_have_line() { grep -qxF -- "$1" "$CALLS"; }
 called_subcommand() { grep -qE "^$1(\t|$)" "$CALLS"; }
@@ -176,7 +187,7 @@ fork_run --title "Trust Fork"
 
 ok  "codex trust: exits 0"                rc_is 0
 ok  "codex trust: answered yes"           calls_have_line $'send\t--surface\t'"$SURFACE"$'\t1'
-ok  "codex trust: submitted answer"       calls_have_line $'send-key\t--surface\t'"$SURFACE"$'\tenter'
+ok  "codex trust: submitted answer"       eq "$(count_enter_keys)" 2
 ok  "codex trust: tab name"               eq "$(field tab)" "trust-fork"
 
 # === Claude explicit source ===============================================
@@ -189,6 +200,16 @@ ok  "claude explicit: provider=claude"      eq "$(field provider)" claude
 ok  "claude explicit: default tab name"     eq "$(field tab)" "fork-claude"
 ok  "claude explicit: launch command" \
       calls_have_line $'send\t--surface\t'"$SURFACE"$'\tclaude --resume '"$CLAUDE_ID"$' --fork-session'
+
+# === Claude trust prompt is answered before readiness =====================
+WORK_CLAUDE_TRUST="$TMP/repo-claude-trust"; mkdir -p "$WORK_CLAUDE_TRUST"
+DEFAULT_CWD="$WORK_CLAUDE_TRUST"; SCENARIO=claude-trust; AUTO_CODEX=""
+fork_run --claude-session-id "$CLAUDE_ID" --title "Claude Trust Fork"
+
+ok  "claude trust: exits 0"                rc_is 0
+ok  "claude trust: answered yes"           calls_have_line $'send\t--surface\t'"$SURFACE"$'\t1'
+ok  "claude trust: submitted answer"       eq "$(count_enter_keys)" 2
+ok  "claude trust: tab name"               eq "$(field tab)" "claude-trust-fork"
 
 # === Claude auto source via CLAUDE_CODE_SESSION_ID =========================
 WORK_CLAUDE_AUTO="$TMP/repo-claude-auto"; mkdir -p "$WORK_CLAUDE_AUTO"

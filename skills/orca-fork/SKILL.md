@@ -74,5 +74,5 @@ A non-zero exit prints `status=error` with an `error=` reason and, when the tab 
 - No worker registry is persisted.
 - No generic `--agent` or `--conversation-id` interface.
 - No recency fallbacks such as `codex fork --last`, `claude --continue --fork-session`, or scanning provider session files.
-- If Codex asks to trust the calling workspace before showing the composer, the script selects the "Yes" option so the fork can finish launching in the same workspace the human already invoked Orca from.
+- If Codex or Claude asks to trust the calling workspace before showing the composer, the script selects the "Yes" option so the fork can finish launching in the same workspace the human already invoked Orca from.
 - The fork opens in the calling workspace, the one this session was fired from.
