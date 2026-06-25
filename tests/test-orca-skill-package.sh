@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 # Package tests for the redistributable orca-agent skill.
 #
-# These tests assert that a copied skill directory contains the executable
-# scripts needed to spawn workers. Root bin/ wrappers are tested elsewhere for
-# compatibility, but OpenSkills-style installs only carry the skill directory.
+# These tests assert that the skill directory contains the executable scripts
+# needed to spawn workers, and that the repo exposes the skill from Codex's
+# native project-skill discovery path without duplicating the implementation.
 set -u
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
 SKILL_DIR="$REPO_ROOT/skills/orca-agent"
+CODEX_SKILL_LINK="$REPO_ROOT/.agents/skills/orca-agent"
 
 PASS=0
 FAIL=0
@@ -28,6 +29,9 @@ done
 list=$("$SKILL_DIR/scripts/orca-adapter.sh" list 2>/dev/null)
 ok "bundled adapter lists known agents" eq "$list" $'claude\ncodex'
 ok "skill instructions point at bundled spawn script" grep -qF "scripts/orca-spawn.sh" "$SKILL_DIR/SKILL.md"
+ok "Codex project skill entry exists" test -L "$CODEX_SKILL_LINK"
+ok "Codex project skill entry points at canonical skill" eq "$(readlink "$CODEX_SKILL_LINK")" "../../skills/orca-agent"
+ok "Codex project skill resolves to SKILL.md" test -f "$CODEX_SKILL_LINK/SKILL.md"
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [[ "$FAIL" -eq 0 ]]
