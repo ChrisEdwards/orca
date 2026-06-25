@@ -160,11 +160,12 @@ resolve_origin_surface() {
 
 append_reply_footer() {
   local message=$1
+  while [[ "$message" == *$'\n' ]]; do message=${message%$'\n'}; done
   if [[ -n "$ORIGIN_SURFACE" ]]; then
-    printf '%s\n\n---\nFrom the agent at surface %s.\nTo reply, use the orca-msg skill targeting that surface if needed.' \
+    printf '%s\n[From the agent at surface %s. To reply, use the orca-msg skill targeting that surface if needed.]' \
       "$message" "$ORIGIN_SURFACE"
   else
-    printf '%s\n\n---\nFrom an Orca message sender; the origin surface was not available.\nTo reply, ask the human for a target surface_id and use the orca-msg skill if needed.' \
+    printf '%s\n[From an Orca message sender; the origin surface was not available. To reply, ask the human for a target surface_id and use the orca-msg skill if needed.]' \
       "$message"
   fi
 }

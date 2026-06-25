@@ -159,7 +159,7 @@ rc_not() { [[ "$LAST_RC" -ne "$1" ]]; }
 eq() { [[ "$1" == "$2" ]]; }
 
 with_footer() {
-  printf '%s\n\n---\nFrom the agent at surface %s.\nTo reply, use the orca-msg skill targeting that surface if needed.' "$1" "$SFC_ORIGIN"
+  printf '%s\n[From the agent at surface %s. To reply, use the orca-msg skill targeting that surface if needed.]' "$1" "$SFC_ORIGIN"
 }
 
 # === Pasted copy-ids block extracts only surface_id ========================

@@ -153,7 +153,7 @@ rc_not() { [[ "$LAST_RC" -ne "$1" ]]; }
 eq() { [[ "$1" == "$2" ]]; }
 
 with_parent_footer() {
-  printf '%s\n\n---\nFrom the parent agent at surface %s.\nTo reply to the parent, use the orca-msg skill targeting that surface if needed.' "$1" "$ORIGIN_SURFACE"
+  printf '%s\n[From the parent agent at surface %s. To reply to the parent, use the orca-msg skill targeting that surface if needed.]' "$1" "$ORIGIN_SURFACE"
 }
 
 # === Codex auto source, open-only =========================================

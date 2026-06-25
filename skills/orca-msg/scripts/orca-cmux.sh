@@ -47,6 +47,14 @@ require_uuid() {
 # need_value <command> <flag> <remaining-arg-count>
 need_value() { (($3 >= 2)) || die "$1: $2 needs a value"; }
 
+normalize_send_payload() {
+  local payload=$1
+  while [[ "$payload" == *$'\n\n'* ]]; do
+    payload=${payload//$'\n\n'/$'\n'}
+  done
+  printf '%s' "$payload"
+}
+
 # create_tab <workspace-uuid> [cwd]
 # Creates a plain terminal surface in the given workspace and prints its stable
 # surface UUID. Uses --focus false so spawning never steals the human's focus.
@@ -102,6 +110,7 @@ case "$cmd" in
       [[ "$cmd" == send ]] && die "send: text argument is required"
       die "send-key: key argument is required"
     fi
+    [[ "$cmd" == send ]] && payload=$(normalize_send_payload "$payload")
     cmux_exec "$cmd" --surface "$sfc" "$payload"
     ;;
 

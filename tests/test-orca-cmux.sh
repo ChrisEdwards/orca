@@ -132,6 +132,11 @@ orca send --surface "$SFC" "claude --some flag" >/dev/null
 assert_args "send keeps spaced text as one argv element" \
   send --surface "$SFC" "claude --some flag"
 
+# send collapses consecutive newlines because cmux treats newlines as Enter.
+orca send --surface "$SFC" $'alpha\n\nbeta\n\n\ngamma' >/dev/null
+assert_args "send collapses blank lines before cmux" \
+  send --surface "$SFC" $'alpha\nbeta\ngamma'
+
 # send-key emits the verified send-key command; the literal "shift+tab" passes through.
 orca send-key --surface "$SFC" "shift+tab" >/dev/null
 assert_args "send-key emits verified send-key command" \

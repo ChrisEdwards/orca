@@ -127,11 +127,12 @@ resolve_origin_surface() {
 
 append_parent_footer() {
   local message=$1
+  while [[ "$message" == *$'\n' ]]; do message=${message%$'\n'}; done
   if [[ -n "$ORIGIN_SURFACE" ]]; then
-    printf '%s\n\n---\nFrom the parent agent at surface %s.\nTo reply to the parent, use the orca-msg skill targeting that surface if needed.' \
+    printf '%s\n[From the parent agent at surface %s. To reply to the parent, use the orca-msg skill targeting that surface if needed.]' \
       "$message" "$ORIGIN_SURFACE"
   else
-    printf '%s\n\n---\nFrom the parent agent; the parent surface was not available.\nTo reply to the parent, ask the human for a target surface_id and use the orca-msg skill if needed.' \
+    printf '%s\n[From the parent agent; the parent surface was not available. To reply to the parent, ask the human for a target surface_id and use the orca-msg skill if needed.]' \
       "$message"
   fi
 }
