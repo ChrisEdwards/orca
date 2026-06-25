@@ -1,0 +1,20 @@
+{
+  "name": "orca",
+  "interface": {
+    "displayName": "Orca"
+  },
+  "plugins": [
+    {
+      "name": "orca",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/ChrisEdwards/orca.git"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Coding"
+    }
+  ]
+}

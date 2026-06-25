@@ -1,0 +1,38 @@
+{
+  "name": "orca",
+  "version": "0.1.0",
+  "description": "Spawn Claude Code or Codex workers in cmux tabs from Codex.",
+  "author": {
+    "name": "Chris Edwards",
+    "url": "https://github.com/ChrisEdwards"
+  },
+  "homepage": "https://github.com/ChrisEdwards/orca",
+  "repository": "https://github.com/ChrisEdwards/orca",
+  "keywords": [
+    "codex",
+    "claude-code",
+    "cmux",
+    "orchestration",
+    "workers"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Orca",
+    "shortDescription": "Spawn Claude Code or Codex workers in cmux tabs.",
+    "longDescription": "Orca packages skills for launching AI coding workers from Codex into cmux tabs, handing each worker a focused brief and reporting the resulting surface.",
+    "developerName": "Chris Edwards",
+    "category": "Coding",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/ChrisEdwards/orca",
+    "defaultPrompt": [
+      "Spawn a Codex worker for this task",
+      "Hand this bug to Claude Code in cmux",
+      "Launch a worker with a self-contained brief"
+    ],
+    "brandColor": "#2F7D80"
+  }
+}

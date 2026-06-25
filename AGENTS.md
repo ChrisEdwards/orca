@@ -1,6 +1,20 @@
 ## Instructions
 
-All development should be done with TDD if feasible.
+Use TDD where it is feasible and valuable: behavior-heavy code, bug fixes with
+clear reproduction steps, and interfaces where a test can exercise real public
+behavior. Do not create brittle or artificial tests only to satisfy TDD. For
+packaging metadata, documentation, generated manifests, external CLI smoke
+checks, or behavior that is hard to observe deterministically, prefer direct
+validation commands and clear manual smoke-test notes over overbuilt test code.
+
+When implementing a bead:
+
+1. Before starting implementation, claim the bead which will set it to in-progress.
+2. Implement the bead, using TDD only where it fits the change.
+3. Commit and push
+4. Close the bead with a comment stating what you did and the commit hash(es)
+
+Use conventional commits
 
 ## Skill Packaging
 
