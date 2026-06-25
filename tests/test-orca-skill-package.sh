@@ -12,6 +12,8 @@ SKILL_DIR="$REPO_ROOT/skills/orca-agent"
 CODEX_SKILL_LINK="$REPO_ROOT/.agents/skills/orca-agent"
 PLUGIN_MANIFEST="$REPO_ROOT/.codex-plugin/plugin.json"
 MARKETPLACE="$REPO_ROOT/.agents/plugins/marketplace.json"
+CLAUDE_PLUGIN_MANIFEST="$REPO_ROOT/.claude-plugin/plugin.json"
+CLAUDE_MARKETPLACE="$REPO_ROOT/.claude-plugin/marketplace.json"
 
 PASS=0
 FAIL=0
@@ -50,6 +52,20 @@ ok "Codex marketplace uses owner namespace" eq "$(json_get "$MARKETPLACE" '.name
 ok "Codex marketplace exposes the orca plugin" eq "$(json_get "$MARKETPLACE" '.plugins[] | select(.name == "orca") | .name')" "orca"
 ok "Codex marketplace uses Git URL source" eq "$(json_get "$MARKETPLACE" '.plugins[] | select(.name == "orca") | .source.source')" "url"
 ok "Codex marketplace points at the repository" eq "$(json_get "$MARKETPLACE" '.plugins[] | select(.name == "orca") | .source.url')" "https://github.com/ChrisEdwards/orca.git"
+
+ok "Claude plugin manifest exists" test -f "$CLAUDE_PLUGIN_MANIFEST"
+ok "Claude plugin manifest is valid JSON" valid_json "$CLAUDE_PLUGIN_MANIFEST"
+ok "Claude plugin identity is orca" eq "$(json_get "$CLAUDE_PLUGIN_MANIFEST" '.name')" "orca"
+ok "Claude plugin packages the skills directory" eq "$(json_get "$CLAUDE_PLUGIN_MANIFEST" '.skills')" "./skills/"
+ok "Claude plugin skills path resolves" test -d "$REPO_ROOT/$(json_get "$CLAUDE_PLUGIN_MANIFEST" '.skills')"
+ok "Claude plugin includes orca-agent skill" test -f "$REPO_ROOT/$(json_get "$CLAUDE_PLUGIN_MANIFEST" '.skills')/orca-agent/SKILL.md"
+
+ok "Claude marketplace exists" test -f "$CLAUDE_MARKETPLACE"
+ok "Claude marketplace is valid JSON" valid_json "$CLAUDE_MARKETPLACE"
+ok "Claude marketplace uses owner namespace" eq "$(json_get "$CLAUDE_MARKETPLACE" '.name')" "chrisedwards"
+ok "Claude marketplace exposes the orca plugin" eq "$(json_get "$CLAUDE_MARKETPLACE" '.plugins[] | select(.name == "orca") | .name')" "orca"
+ok "Claude marketplace source is root-native" eq "$(json_get "$CLAUDE_MARKETPLACE" '.plugins[] | select(.name == "orca") | .source')" "./"
+ok "Claude marketplace source resolves to repo root" test -f "$REPO_ROOT/$(json_get "$CLAUDE_MARKETPLACE" '.plugins[] | select(.name == "orca") | .source')/.claude-plugin/plugin.json"
 
 duplicate_runtime_scripts=$(find "$REPO_ROOT" -path "$REPO_ROOT/.git" -prune -o -path "$REPO_ROOT/skills/*/scripts/*" -prune -o -name 'orca-*.sh' -print)
 ok "runtime scripts are not duplicated outside skill directories" eq "$duplicate_runtime_scripts" ""

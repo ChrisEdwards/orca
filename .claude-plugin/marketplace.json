@@ -1,0 +1,28 @@
+{
+  "name": "chrisedwards",
+  "owner": {
+    "name": "Chris Edwards"
+  },
+  "metadata": {
+    "description": "Plugin marketplace for Chris Edwards' Claude Code extensions.",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "orca",
+      "description": "Spawn Claude Code or Codex workers in cmux tabs.",
+      "author": {
+        "name": "Chris Edwards"
+      },
+      "homepage": "https://github.com/ChrisEdwards/orca",
+      "tags": [
+        "claude-code",
+        "codex",
+        "cmux",
+        "orchestration",
+        "workers"
+      ],
+      "source": "./"
+    }
+  ]
+}

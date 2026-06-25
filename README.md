@@ -64,3 +64,40 @@ If the install step fails with `fatal: could not read Username for
 but the GitHub source cannot be cloned non-interactively. Authenticate GitHub
 access for `https://github.com/ChrisEdwards/orca.git` or make the repository
 public, then rerun `codex plugin add orca --marketplace chrisedwards --json`.
+
+## Install In Claude Code
+
+Add this repository as a Claude Code plugin marketplace:
+
+```text
+/plugin marketplace add ChrisEdwards/orca
+```
+
+Then install the plugin:
+
+```text
+/plugin install orca@chrisedwards
+```
+
+From the terminal, the equivalent commands are:
+
+```bash
+claude plugin marketplace add ChrisEdwards/orca
+claude plugin install orca@chrisedwards
+```
+
+For one session while developing locally, load the plugin directly:
+
+```bash
+claude --plugin-dir . --print "List available Orca skills."
+```
+
+Claude Code namespaces plugin skills by plugin name. The current skill is
+available as `/orca:orca-agent` after the plugin is installed or loaded.
+
+Validate the Claude plugin and marketplace manifests:
+
+```bash
+claude plugin validate .claude-plugin/plugin.json --strict
+claude plugin validate .claude-plugin/marketplace.json --strict
+```

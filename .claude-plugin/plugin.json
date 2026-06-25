@@ -1,0 +1,20 @@
+{
+  "name": "orca",
+  "displayName": "Orca",
+  "version": "0.1.0",
+  "description": "Spawn Claude Code or Codex workers in cmux tabs.",
+  "author": {
+    "name": "Chris Edwards",
+    "url": "https://github.com/ChrisEdwards"
+  },
+  "homepage": "https://github.com/ChrisEdwards/orca",
+  "repository": "https://github.com/ChrisEdwards/orca",
+  "keywords": [
+    "claude-code",
+    "codex",
+    "cmux",
+    "orchestration",
+    "workers"
+  ],
+  "skills": "./skills/"
+}
