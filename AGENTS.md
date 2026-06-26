@@ -7,6 +7,8 @@ packaging metadata, documentation, generated manifests, external CLI smoke
 checks, or behavior that is hard to observe deterministically, prefer direct
 validation commands and clear manual smoke-test notes over overbuilt test code.
 
+Favor idiomatic patterns for code and processes. This adhere's to Ward Cunningham's definition of good code "When I look at code and think, 'That's about what I expected'". 
+
 All code changes should have a bead tracking it. Create one if you are making changes and don't have one.
 
 When implementing a bead:

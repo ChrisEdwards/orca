@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# Enforces script copy-parity across skills.
+# Any file staged under skills/*/scripts/ must be byte-for-byte identical
+# to every other skills/*/scripts/<same-name> in the git index.
+
+set -euo pipefail
+
+# Staged adds/copies/modifications/renames/type-changes in skills/*/scripts/
+staged=$(git diff --cached --name-only --diff-filter=ACMRT -- 'skills/*/scripts/*' || true)
+
+if [ -z "$staged" ]; then
+  exit 0
+fi
+
+# Unique basenames of staged scripts
+names=$(printf '%s\n' "$staged" | sed 's|.*/||' | sort -u)
+
+failed=0
+
+while IFS= read -r name; do
+  # All index paths for this script name across all skills
+  all_paths=$(git ls-files -- "skills/*/scripts/$name" || true)
+  path_count=$(printf '%s\n' "$all_paths" | grep -c '.' || true)
+
+  if [ "$path_count" -le 1 ]; then
+    continue
+  fi
+
+  # Compare every copy against the first
+  first_path=$(printf '%s\n' "$all_paths" | head -1)
+  ref_content=$(git show ":$first_path")
+  divergent=false
+
+  while IFS= read -r path; do
+    [ "$path" = "$first_path" ] && continue
+    if [ "$(git show ":$path")" != "$ref_content" ]; then
+      divergent=true
+      break
+    fi
+  done <<< "$all_paths"
+
+  $divergent || continue
+
+  # Staged paths for this script name
+  staged_for=$(printf '%s\n' "$staged" | grep "/scripts/$name$" || true)
+  staged_count=$(printf '%s\n' "$staged_for" | grep -c '.' || true)
+
+  failed=1
+
+  printf '\nERROR: Shared script '"'"'%s'"'"' differs across skills.\n\n' "$name" >&2
+
+  while IFS= read -r path; do
+    if printf '%s\n' "$staged_for" | grep -qxF "$path"; then
+      printf '  %s  <- staged\n' "$path" >&2
+    else
+      printf '  %s\n' "$path" >&2
+    fi
+  done <<< "$all_paths"
+
+  printf '\n' >&2
+  printf '  Scripts under skills/*/scripts/ are shared by copying. When you change\n' >&2
+  printf '  one, you must copy the change to every skill that shares that filename\n' >&2
+  printf '  before committing.\n' >&2
+
+  if [ "$staged_count" -eq 1 ]; then
+    src=$(printf '%s\n' "$staged_for" | head -1)
+    printf '\n  To sync the staged version to all copies:\n' >&2
+    while IFS= read -r path; do
+      [ "$path" = "$src" ] && continue
+      printf '    cp %s %s\n' "$src" "$path" >&2
+    done <<< "$all_paths"
+  fi
+
+  printf '\n' >&2
+
+done <<< "$names"
+
+exit $failed
