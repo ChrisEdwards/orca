@@ -31,6 +31,8 @@ sub=${1:-}; shift || true
 launched="$FAKE_STATE/launched"
 trust_selected="$FAKE_STATE/trust-selected"
 trusted="$FAKE_STATE/trusted"
+upgrade_selected="$FAKE_STATE/upgrade-selected"
+upgrade_dismissed="$FAKE_STATE/upgrade-dismissed"
 
 case "$sub" in
   identify)
@@ -47,12 +49,16 @@ case "$sub" in
   send)
     payload=""; for a in "$@"; do payload=$a; done
     [[ "$payload" == "1" ]] && : > "$trust_selected"
+    expected_upgrade=2
+    [[ "${FAKE_SCENARIO:-}" == codex-upgrade-skip-3 ]] && expected_upgrade=3
+    [[ "$payload" == "$expected_upgrade" ]] && : > "$upgrade_selected"
     : > "$launched"
     echo "OK surface:43 workspace:9"
     ;;
   send-key)
     key=""; for a in "$@"; do key=$a; done
     [[ "$key" == "enter" && -f "$trust_selected" ]] && : > "$trusted"
+    [[ "$key" == "enter" && -f "$upgrade_selected" ]] && : > "$upgrade_dismissed"
     echo "OK surface:43 workspace:9"
     ;;
   read-screen)
@@ -72,6 +78,30 @@ case "$sub" in
           printf '  Do you trust the contents of this directory?\n'
           printf '› 1. Yes, continue\n'
           printf '  2. No, quit\n'
+          exit 0
+        fi
+        printf '› Forked conversation\n'
+        printf 'gpt-5.5 high · %s\n' "$FAKE_CWD"
+        ;;
+      codex-upgrade)
+        [[ -f "$launched" ]] || { echo "booting codex"; exit 0; }
+        if [[ ! -f "$upgrade_dismissed" ]]; then
+          printf '  ✨ Update available! 0.142.0 -> 0.142.2\n'
+          printf '› 1. Update now\n'
+          printf '  2. Skip\n'
+          printf '  3. Skip until next version\n'
+          exit 0
+        fi
+        printf '› Forked conversation\n'
+        printf 'gpt-5.5 high · %s\n' "$FAKE_CWD"
+        ;;
+      codex-upgrade-skip-3)
+        [[ -f "$launched" ]] || { echo "booting codex"; exit 0; }
+        if [[ ! -f "$upgrade_dismissed" ]]; then
+          printf '  ✨ Update available! 0.142.0 -> 0.142.2\n'
+          printf '  1. Update now\n'
+          printf '  2. Skip until next version\n'
+          printf '  3. Skip\n'
           exit 0
         fi
         printf '› Forked conversation\n'
@@ -195,6 +225,28 @@ ok  "codex trust: exits 0"                rc_is 0
 ok  "codex trust: answered yes"           calls_have_line $'send\t--surface\t'"$SURFACE"$'\t1'
 ok  "codex trust: submitted answer"       eq "$(count_enter_keys)" 2
 ok  "codex trust: tab name"               eq "$(field tab)" "trust-fork"
+
+# === Codex upgrade prompt is dismissed before readiness ===================
+WORK_UPGRADE="$TMP/repo-codex-upgrade"; mkdir -p "$WORK_UPGRADE"
+DEFAULT_CWD="$WORK_UPGRADE"; SCENARIO=codex-upgrade; AUTO_CODEX="$CODEX_ID"
+fork_run --title "Upgrade Fork"
+
+ok  "codex upgrade: exits 0"              rc_is 0
+ok  "codex upgrade: status=ok"            eq "$(field status)" ok
+ok  "codex upgrade: sent skip (2)"        calls_have_line $'send\t--surface\t'"$SURFACE"$'\t2'
+ok  "codex upgrade: submitted answer"     eq "$(count_enter_keys)" 2
+ok  "codex upgrade: tab name"             eq "$(field tab)" "upgrade-fork"
+
+# === Codex upgrade prompt sends option 3 when plain Skip is third ==========
+WORK_UPGRADE_3="$TMP/repo-codex-upgrade-3"; mkdir -p "$WORK_UPGRADE_3"
+DEFAULT_CWD="$WORK_UPGRADE_3"; SCENARIO=codex-upgrade-skip-3; AUTO_CODEX="$CODEX_ID"
+fork_run --title "Upgrade Fork Three"
+
+ok  "codex upgrade 3: exits 0"               rc_is 0
+ok  "codex upgrade 3: status=ok"             eq "$(field status)" ok
+ok  "codex upgrade 3: sent skip (3)"         calls_have_line $'send\t--surface\t'"$SURFACE"$'\t3'
+ok  "codex upgrade 3: submitted answer"      eq "$(count_enter_keys)" 2
+ok  "codex upgrade 3: tab name"              eq "$(field tab)" "upgrade-fork-three"
 
 # === Claude explicit source ===============================================
 WORK3="$TMP/repo-claude"; mkdir -p "$WORK3"
