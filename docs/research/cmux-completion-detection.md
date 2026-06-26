@@ -132,6 +132,16 @@ resolved immediately and replayed the buffered Stop — confirming the "resolvin
 late is safe" design. Mitigation: raise `ORCA_WATCH_RESOLVE_SECS` for Codex steps
 spawning into cold repos (the review step used 90s).
 
+Slice 4 extraction (orca-o3b), re-verified live: the generic machinery moved into
+a new `orca-workflow` skill and `orca-ship` became a thin workflow that defers to
+it. A fresh-repo smoke run *through the orca-workflow procedure* — `orca-workflow-init.sh`
+set up the handoff dirs, then implement(codex) added `subtract(a, b)` and wrote
+`implementation.md` (turn_end, seq 27366, resolved cleanly at 90s), then
+review(claude) wrote `review-1.json` (`[]`, turn_end seq 27459) — passed the gate
+with no fix round. Confirms the skill-composes-skill design (orca-ship supplies
+the steps, orca-workflow supplies the run-step loop) runs identically to the
+hardcoded version.
+
 Not yet exercised live: the `attention` classification (`Notification` /
 `PermissionRequest` / `AskUserQuestion`), covered when a worker actually pauses
 for input. The screen-read fallback for agents without hook integration is also

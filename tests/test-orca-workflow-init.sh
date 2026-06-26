@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Behavior tests for orca-ship-init.sh: task-id slugging, collision handling,
+# Behavior tests for orca-workflow-init.sh: task-id slugging, collision handling,
 # and handoff dir creation. Deterministic and isolated, so this is real TDD
 # surface rather than a smoke check.
 set -u
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
-INIT="$REPO_ROOT/skills/orca-ship/scripts/orca-ship-init.sh"
+INIT="$REPO_ROOT/skills/orca-workflow/scripts/orca-workflow-init.sh"
 
 PASS=0
 FAIL=0
@@ -15,7 +15,7 @@ fail() { FAIL=$((FAIL + 1)); printf 'FAIL: %s\n' "$1" >&2; }
 ok() { local desc=$1; shift; if "$@"; then pass; else fail "$desc"; fi; }
 eq() { [[ "$1" == "$2" ]]; }
 
-TMP=$(mktemp -d "${TMPDIR:-/tmp}/orca-ship-init-test.XXXXXX")
+TMP=$(mktemp -d "${TMPDIR:-/tmp}/orca-workflow-init-test.XXXXXX")
 cleanup() { chmod -R u+w "$TMP" 2>/dev/null; /bin/rm -rf "$TMP"; }
 trap cleanup EXIT
 

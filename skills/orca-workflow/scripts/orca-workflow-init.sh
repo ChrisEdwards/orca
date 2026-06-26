@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 #
-# orca-ship-init - set up the task id and handoff workspace for one ship run.
+# orca-workflow-init - set up the task id and handoff workspace for one workflow run.
 #
-# orca-ship hands context between steps through files, never through worker
+# A workflow hands context between steps through files, never through worker
 # conversation history. Those files live OUTSIDE the target repo so they can
 # never be committed: ${TMPDIR:-/tmp}/orca/<task-id>/. This helper owns only the
 # deterministic mechanics (slugging the task id, creating the dirs) so the rest
-# of orca-ship can stay orchestrator-driven.
+# of the workflow can stay orchestrator-driven.
 #
 # Usage:
-#   orca-ship-init.sh --task <title> [--root <dir>]
+#   orca-workflow-init.sh --task <title> [--root <dir>]
 #
 #   --task   human task title; becomes the kebab task id (collision-suffixed)
 #   --root   base dir for task state (default ${TMPDIR:-/tmp}/orca)
@@ -21,7 +21,7 @@
 #   artifacts_dir=<task-dir>/artifacts
 set -euo pipefail
 
-die() { printf 'orca-ship-init: %s\n' "$1" >&2; exit 1; }
+die() { printf 'orca-workflow-init: %s\n' "$1" >&2; exit 1; }
 
 task=""; root=""
 while (($#)); do
@@ -31,7 +31,7 @@ while (($#)); do
     *) die "unexpected argument: $1" ;;
   esac
 done
-[[ -n "$task" ]] || die "usage: orca-ship-init.sh --task <title> [--root <dir>]"
+[[ -n "$task" ]] || die "usage: orca-workflow-init.sh --task <title> [--root <dir>]"
 
 root=${root:-${TMPDIR:-/tmp}/orca}
 
