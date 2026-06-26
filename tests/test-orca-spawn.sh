@@ -97,6 +97,20 @@ case "$sub" in
     echo "OK surface:43 ($FAKE_SURFACE) pane:16 (PANE-UUID) workspace:9 ($FAKE_WS)"
     ;;
   rename-tab) echo "OK" ;;
+  events)
+    case "${FAKE_EVENT_MODE:-ack}" in
+      fail)
+        echo "events unavailable" >&2
+        exit 7
+        ;;
+      garbage)
+        echo "not-json"
+        ;;
+      *)
+        printf '{"type":"ack","resume":{"latest_seq":%s}}\n' "${FAKE_EVENT_SEQ:-123}"
+        ;;
+    esac
+    ;;
   send)
     payload=""; for a in "$@"; do payload=$a; done
     [[ "$payload" == "1" ]] && : > "$trust_selected"
@@ -206,6 +220,7 @@ WORKSPACE_MODE="default"
 POLLS=30
 DEFAULT_CWD=""     # the caller workspace dir the fake reports
 TARGET_CWD=""
+EVENT_MODE="ack"
 LAST_OUT=""
 LAST_ERR=""
 LAST_RC=0
@@ -221,6 +236,7 @@ spawn() {
     FAKE_CREATED_WS="$CREATED_WS" FAKE_TARGET_CWD="$TARGET_CWD" \
     FAKE_ORIGIN_SURFACE="$ORIGIN_SURFACE" \
     FAKE_SCENARIO="$SCENARIO" FAKE_WORKSPACE_MODE="$WORKSPACE_MODE" \
+    FAKE_EVENT_MODE="$EVENT_MODE" \
     ORCA_READY_POLLS="$POLLS" ORCA_POLL_INTERVAL=0 ORCA_MODE_INTERVAL=0 \
     "$SPAWN" "$@" 2>"$errfile")
   LAST_RC=$?
@@ -228,11 +244,31 @@ spawn() {
 }
 
 field() { grep -E "^$1=" <<<"$LAST_OUT" | head -1 | cut -d= -f2-; }
+field_absent() { ! grep -qE "^$1=" <<<"$LAST_OUT"; }
 count_shift_tabs() { grep -c $'\tshift+tab$' "$CALLS"; }
 count_enter_keys() { grep -c $'\tenter$' "$CALLS"; }
 calls_have() { grep -qF -- "$1" "$CALLS"; }
 calls_have_line() { grep -qxF -- "$1" "$CALLS"; }
 called_subcommand() { grep -qE "^$1(\t|$)" "$CALLS"; }
+first_call_line() {
+  local pattern=$1 line
+  line=$(grep -nF -- "$pattern" "$CALLS" | head -1 | cut -d: -f1)
+  [[ -n "$line" ]] || return 1
+  printf '%s' "$line"
+}
+last_call_line() {
+  local pattern=$1 line
+  line=$(grep -nF -- "$pattern" "$CALLS" | tail -1 | cut -d: -f1)
+  [[ -n "$line" ]] || return 1
+  printf '%s' "$line"
+}
+call_between() {
+  local before=$1 middle=$2 after=$3 before_line middle_line after_line
+  before_line=$(last_call_line "$before") || return 1
+  middle_line=$(first_call_line "$middle") || return 1
+  after_line=$(first_call_line "$after") || return 1
+  [[ "$before_line" -lt "$middle_line" && "$middle_line" -lt "$after_line" ]]
+}
 mentions() { grep -qiF -- "$1" <<<"$LAST_OUT"$'\n'"$LAST_ERR"; }
 mentions_err() { grep -qF "$1" <<<"$LAST_ERR"; }
 rc_is() { [[ "$LAST_RC" -eq "$1" ]]; }
@@ -253,6 +289,7 @@ spawn_must_finish() {
     FAKE_CREATED_WS="$CREATED_WS" FAKE_TARGET_CWD="$TARGET_CWD" \
     FAKE_ORIGIN_SURFACE="$ORIGIN_SURFACE" \
     FAKE_SCENARIO="$SCENARIO" FAKE_WORKSPACE_MODE="$WORKSPACE_MODE" \
+    FAKE_EVENT_MODE="$EVENT_MODE" \
     ORCA_READY_POLLS="$POLLS" ORCA_POLL_INTERVAL=0 ORCA_MODE_INTERVAL=0 \
     "$SPAWN" "$@" >"$out" 2>"$err" &
   local pid=$!
@@ -283,9 +320,12 @@ ok  "claude: reports caller workspace"     eq "$(field workspace)" "$WS"
 ok  "claude: reports workspace not created" eq "$(field workspace_created)" false
 ok  "claude: task id is a kebab slug"      eq "$(field task_id)" "fix-the-login-bug"
 ok  "claude: tab named from task id"       eq "$(field tab)" "fix-the-login-bug"
+ok  "claude: reports after_seq from events ack" eq "$(field after_seq)" 123
 ok  "claude: cycles shift+tab to auto (3)" eq "$(count_shift_tabs)" 3
 ok  "claude: delivers pointer brief" \
       calls_have "$(with_parent_footer "Read .orca/briefs/fix-the-login-bug.md and carry out the task it describes.")"
+ok  "claude: captures event anchor after readiness and before brief delivery" \
+      call_between "read-screen" $'events\t--no-heartbeat' $'send\t--surface\t'"$SURFACE"$'\tRead .orca/briefs/fix-the-login-bug.md and carry out the task it describes.'
 ok  "claude: create-tab sets the worker cwd" calls_have $'--working-directory\t'"$WORK"
 ok  "claude: launch sends only the agent command" \
       calls_have_line $'send\t--surface\t'"$SURFACE"$'\tclaude'
@@ -316,12 +356,28 @@ spawn --agent codex --task "Add unit tests" --brief "Cover the parser."
 
 ok  "codex: exits 0"                    rc_is 0
 ok  "codex: returns the surface UUID"   eq "$(field surface)" "$SURFACE"
+ok  "codex: reports after_seq from events ack" eq "$(field after_seq)" 123
 ok  "codex: no mode step (0 shift+tab)" eq "$(count_shift_tabs)" 0
 ok  "codex: delivers pointer brief" \
       calls_have "$(with_parent_footer "Read .orca/briefs/add-unit-tests.md and carry out the task it describes.")"
+ok  "codex: captures event anchor after readiness and before brief delivery" \
+      call_between "read-screen" $'events\t--no-heartbeat' $'send\t--surface\t'"$SURFACE"$'\tRead .orca/briefs/add-unit-tests.md and carry out the task it describes.'
 ok  "codex: launch sends only codex -p yolo" \
       calls_have_line $'send\t--surface\t'"$SURFACE"$'\tcodex -p yolo'
 ok  "codex: brief file written"         test -f "$WORK2/.orca/briefs/add-unit-tests.md"
+
+# === Event anchor fallback is best effort =================================
+WORK_EVENT_FALLBACK="$TMP/repo-event-fallback"; mkdir -p "$WORK_EVENT_FALLBACK"
+DEFAULT_CWD="$WORK_EVENT_FALLBACK"; SCENARIO=codex; EVENT_MODE=garbage
+spawn --agent codex --task "Event fallback" --brief "Proceed without an anchor."
+EVENT_MODE=ack
+
+ok  "event fallback: exits 0"                 rc_is 0
+ok  "event fallback: status=ok"               eq "$(field status)" ok
+ok  "event fallback: attempted event anchor"  calls_have_line $'events\t--no-heartbeat'
+ok  "event fallback: omits after_seq"         field_absent after_seq
+ok  "event fallback: still delivers pointer brief" \
+      calls_have "$(with_parent_footer "Read .orca/briefs/event-fallback.md and carry out the task it describes.")"
 
 # === Codex trust prompt is answered before readiness ======================
 WORK_CODEX_TRUST="$TMP/repo-codex-trust"; mkdir -p "$WORK_CODEX_TRUST"
