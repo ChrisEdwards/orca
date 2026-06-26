@@ -47,6 +47,7 @@ document it as a prerequisite.
 - Worker findings should default to the worker's final response. If a durable handoff or artifact is needed, use `${TMPDIR:-/tmp}/orca/<task-id>/`, never paths inside the repo that can be checked in.
 - cmux `workspace create` (and its `new-workspace` alias) prints only a positional ref (`OK workspace:N`), never a UUID, even with `--id-format both` or `--json`. `new-surface` still emits UUIDs. To get a stable workspace UUID, resolve the created ref via `list-workspaces --id-format both` (table form: `[*] <ref> <uuid>  <title>`). The legacy `new-workspace` alias also prints a deprecation hint on stderr; it is harmless because callers capture stdout only, but set `CMUX_QUIET=1` if you ever capture `2>&1`.
 - The test fakes for cmux can silently drift from the installed cmux's real output format (they kept emitting the old UUID-bearing `new-workspace` output), which let real spawn breakage pass CI. When a cmux output format matters to parsing, make the fake match the installed cmux, not a remembered format.
+- In zsh, `$status` is a readonly special parameter; use names like `test_status` for captured exit codes in restoration or negative-test snippets.
 
 <!-- br-agent-instructions-v1 -->
 
