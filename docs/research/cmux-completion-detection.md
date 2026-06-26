@@ -41,9 +41,18 @@ They do carry `payload.workspace_id`, `payload.cwd`, and
 and they may share a repo cwd, neither workspace nor cwd uniquely identifies a
 worker. Attribution must go through `session_id`.
 
-The bridge is the session store `~/.cmuxterm/<source>-hook-sessions.json`, whose
-`activeSessionsBySurface` maps a surface UUID to its `sessionId`. Formats differ
-by one prefix:
+The bridge is the session store `~/.cmuxterm/<source>-hook-sessions.json`. The
+two adapters lay it out differently, so a resolver must handle both:
+
+- Claude: `activeSessionsBySurface[<surface>].sessionId`.
+- Codex: `activeSessionsBySurface` is empty; sessions live under
+  `sessions[<sessionId>]` with a `surfaceId` field, so resolution is a reverse
+  scan for the record whose `surfaceId` matches the worker surface. (The Codex
+  record also carries `agentLifecycle`, `runtimeStatus`, and `lastBody`
+  directly, a richer state than Claude's store exposes.)
+
+Either way the resolved value is a bare `sessionId`. Formats differ from the
+event by one prefix:
 
 - store `sessionId`: bare UUID, e.g. `ce045992-...`
 - event `payload.session_id`: `<source>-<uuid>`, e.g. `claude-ce045992-...` /
@@ -92,7 +101,16 @@ Verified `skills/orca-watch/scripts/orca-watch.sh` against live cmux 0.64.17:
    "cwd":".../orca","seq":23749}`. Surface-to-session resolution and attribution
    confirmed correct.
 
-Not yet exercised live: a Codex worker turn-end (same `agent.hook.Stop` path,
-verified only from the recorded event log) and the `attention` classification
-(`Notification` / `PermissionRequest` / `AskUserQuestion`). Both are covered
-when Slice 2 folds `orca-watch` into `orca-spawn` and runs real workers.
+Slice 2 fire-and-follow, verified live end to end: `orca-spawn` spawned a real
+Codex worker and emitted `after_seq` (the cmux `latest_seq` captured just before
+the brief), then `orca-watch --after <seq>` resolved the Codex session via the
+`sessions` reverse scan, replayed from the anchor, and caught the worker's
+`turn_end` (`agent.hook.Stop`, seq 25731) even though the Stop fired during the
+spawn-to-watch handoff. This confirms the live Codex path and the race-free
+anchor. The smoke also surfaced the Codex-vs-Claude store-shape difference noted
+above, which the resolver now handles.
+
+Not yet exercised live: the `attention` classification (`Notification` /
+`PermissionRequest` / `AskUserQuestion`), covered when a worker actually pauses
+for input. The screen-read fallback for agents without hook integration is also
+not yet built.

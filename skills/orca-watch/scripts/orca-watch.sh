@@ -55,13 +55,24 @@ for _ in 1 2 3 4 5 6 7 8 9 10; do
   session=$(python3 - "$store" "$surface" <<'PY'
 import json, sys
 store, surface = sys.argv[1], sys.argv[2]
+target = surface.lower()
 try:
     data = json.load(open(store))
 except Exception:
     sys.exit(0)
+
+# Two store shapes seen in the wild:
+#  - Claude: activeSessionsBySurface[surface] = {sessionId: ...}
+#  - Codex:  sessions[sessionId] = {surfaceId: ..., sessionId: ...}
 entry = (data.get("activeSessionsBySurface") or {}).get(surface)
 if entry and entry.get("sessionId"):
-    print(entry["sessionId"])
+    print(entry["sessionId"]); sys.exit(0)
+
+for sid, rec in (data.get("sessions") or {}).items():
+    if not isinstance(rec, dict):
+        continue
+    if str(rec.get("surfaceId") or "").lower() == target:
+        print(rec.get("sessionId") or sid); sys.exit(0)
 PY
 )
   [[ -n "$session" ]] && break

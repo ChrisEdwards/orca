@@ -27,6 +27,7 @@
 #   tab=<task id>
 #   cwd=<resolved working directory>
 #   brief=<relative brief path>
+#   after_seq=<cmux event seq anchor>   (success; for race-free orca-watch)
 #   error=<reason>                      (on failure)
 #
 # On any post-launch failure the worker tab is LEFT OPEN (never closed) so the
@@ -62,6 +63,7 @@ WORKSPACE_CREATED=""
 SURFACE=""
 CWD=""
 BRIEF_REL=""
+AFTER_SEQ=""
 ORIGIN_SURFACE=""
 UUID_RE='^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$'
 
@@ -131,6 +133,20 @@ append_parent_footer() {
     printf '%s\n[From the parent agent; the parent surface was not available. To reply to the parent, ask the human for a target surface_id and use the orca-msg skill if needed.]' \
       "$message"
   fi
+}
+
+# Read cmux's current latest event seq from a fresh subscription's ack frame.
+# Captured just before the brief is sent, it is the race-free floor for a later
+# `orca-watch --after`: the worker's first turn-end has a higher seq, so a fast
+# worker that finishes before the watcher attaches is still replayed. Best
+# effort; prints nothing if cmux or jq cannot supply a numeric seq, and the
+# caller then simply omits after_seq (orca-watch falls back to subscribe-now).
+capture_event_anchor() {
+  local ack seq
+  ack=$("$CMUX_BIN" events --no-heartbeat 2>/dev/null | head -1) || true
+  [[ -n "$ack" ]] || return 0
+  seq=$(jq -r '.resume.latest_seq // empty' <<<"$ack" 2>/dev/null) || true
+  [[ "$seq" =~ ^[0-9]+$ ]] && printf '%s' "$seq"
 }
 
 # Fail after the worker tab exists: leave it open, name the surface, exit 1.
@@ -361,6 +377,8 @@ if [[ "$mode" == cycle ]]; then
 fi
 
 # --- 8. deliver the brief by pointer ---------------------------------------
+# Anchor the event stream before the brief lands so fire-and-follow is race-free.
+AFTER_SEQ=$(capture_event_anchor)
 delivery=$(append_parent_footer "Read $BRIEF_REL and carry out the task it describes.")
 "$ORCA_CMUX" send --surface "$SURFACE" "$delivery" >/dev/null \
   || spawn_fail "failed to deliver the brief"
@@ -377,3 +395,4 @@ printf 'surface=%s\n' "$SURFACE"
 printf 'tab=%s\n' "$TASK_ID"
 printf 'cwd=%s\n' "$CWD"
 printf 'brief=%s\n' "$BRIEF_REL"
+[[ -n "$AFTER_SEQ" ]] && printf 'after_seq=%s\n' "$AFTER_SEQ"

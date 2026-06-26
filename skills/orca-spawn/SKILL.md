@@ -75,8 +75,22 @@ Resolve `scripts/orca-spawn.sh` relative to this skill directory.
 - whether the workspace was created
 - the **worker surface UUID** — hold this in context; it is how you address the worker later
 - the **tab name**
+- the **after_seq** anchor — hold this too; pass it to `orca-watch --after` so following the worker is race-free
 
 Example: "Spawned a Codex worker for `fix-login-redirect` in workspace `90D8…` in tab `fix-login-redirect` (surface `CEBB…`). It reached ready and has the brief."
+
+## Fire and follow
+
+`orca-spawn` itself stops at fire and confirm. To follow the worker to its first turn-end or attention pause, compose it with the `orca-watch` skill, which parks on the cmux event stream instead of polling the worker's screen.
+
+After a successful spawn, take the reported `surface` and `after_seq` and start a watch, preferably as a background command so this session stays free until the worker transitions:
+
+```bash
+# (orca-watch lives in its own skill; resolve its script from that skill dir)
+orca-watch.sh --surface <surface UUID> --agent <claude|codex> --after <after_seq> --timeout <secs>
+```
+
+It prints one JSON line on the first transition: `event: turn_end` (worker finished its turn) or `event: attention` (worker is waiting on a notification, permission, or question). Use that to collect results, message the worker, or tell the human to flip to its tab. Passing `--after` the spawn anchor guarantees a fast worker that finishes before the watch attaches is not missed.
 
 ## On failure
 
@@ -84,7 +98,7 @@ A non-zero exit prints `status=error` with an `error=` reason and, when the tab 
 
 ## Boundaries
 
-- One task, one worker, no monitoring afterward. This is fire and confirm.
+- One task, one worker. `orca-spawn` itself stops at fire and confirm and never monitors or tears down the worker; following it to completion is the separate `orca-watch` skill (see Fire and follow above).
 - No worker registry or monitoring state is persisted. Brief files are written under `.orca/briefs/`, and `orca-spawn` ensures `.orca/` is gitignored.
 - With no workspace selector, the worker opens in the calling workspace, the one this session was fired from.
 - `orca-spawn` owns only cmux workspace routing and worker launch mechanics. It may select or create a target workspace, but it does not parse PR URLs, discover repositories, clone repositories, fetch branches, create working directories, or construct review-specific briefs.
