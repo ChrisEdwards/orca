@@ -46,6 +46,8 @@ ORCA_ADAPTER="$BIN_DIR/orca-adapter.sh"
 . "$BIN_DIR/orca-trust-prompt.sh"
 # shellcheck source=skills/orca-spawn/scripts/orca-upgrade-prompt.sh
 . "$BIN_DIR/orca-upgrade-prompt.sh"
+# shellcheck source=skills/orca-spawn/scripts/orca-launch.sh
+. "$BIN_DIR/orca-launch.sh"
 
 export CMUX_BIN=${CMUX_BIN:-cmux}
 
@@ -92,27 +94,6 @@ require_uuid_value() {
   local label=$1 value=$2
   [[ -n "$value" ]] || die "$label is required"
   [[ "$value" =~ $UUID_RE ]] || die "$label '$value' is not a UUID; positional refs drift, pass the stable UUID"
-}
-
-is_ready() {
-  local screen=$1
-  case "$agent" in
-    codex)
-      grep -qF -- "$ready_marker" <<<"$screen" && grep -qF -- " · " <<<"$screen"
-      ;;
-    *)
-      grep -qF -- "$ready_marker" <<<"$screen"
-      ;;
-  esac
-}
-
-read_worker_screen() {
-  local out
-  if ! out=$("$ORCA_CMUX" read-screen --surface "$SURFACE" --lines 40 2>&1); then
-    out=${out//$'\n'/ }
-    spawn_fail "failed to read worker screen: $out"
-  fi
-  printf '%s\n' "$out"
 }
 
 resolve_origin_surface() {
@@ -318,65 +299,20 @@ SURFACE=$("$ORCA_CMUX" create-tab --workspace "$WORKSPACE" --cwd "$CWD" 2>/dev/n
 # Name the tab from the task id (cmux may later replace it with its own title).
 "$CMUX_BIN" rename-tab --surface "$SURFACE" "$TASK_ID" >/dev/null 2>&1 || true
 
-# --- 5. launch the agent in the worker cwd ---------------------------------
-"$ORCA_CMUX" send --surface "$SURFACE" "$launch" >/dev/null \
-  || spawn_fail "failed to send the launch command"
-"$ORCA_CMUX" send-key --surface "$SURFACE" enter >/dev/null \
-  || spawn_fail "failed to send enter after launch"
+# --- 5. launch the agent and bring it to ready (shared launch helper) -------
+orca_launch_to_ready "$SURFACE" "$launch" "$agent" "$ready_marker" \
+  || spawn_fail "$ORCA_LAUNCH_REASON"
 
-# --- 6. poll until the readiness marker appears ----------------------------
-ready=0
-for ((p = 0; p < ORCA_READY_POLLS; p++)); do
-  screen=$(read_worker_screen)
-  if orca_maybe_accept_trust_prompt "$screen" "$SURFACE"; then
-    sleep "$ORCA_POLL_INTERVAL"
-    continue
-  else
-    trust_rc=$?
-    case "$trust_rc" in
-      1) ;;
-      2) spawn_fail "failed to answer the trust prompt" ;;
-      3) spawn_fail "failed to submit the trust prompt answer" ;;
-      *) spawn_fail "failed to handle the trust prompt" ;;
-    esac
-  fi
-  if orca_maybe_dismiss_upgrade_prompt "$screen" "$SURFACE"; then
-    sleep "$ORCA_POLL_INTERVAL"
-    continue
-  else
-    upgrade_rc=$?
-    case "$upgrade_rc" in
-      1) ;;
-      2) spawn_fail "failed to answer the upgrade prompt" ;;
-      3) spawn_fail "failed to submit the upgrade prompt answer" ;;
-      *) spawn_fail "failed to handle the upgrade prompt" ;;
-    esac
-  fi
-  if is_ready "$screen"; then ready=1; break; fi
-  sleep "$ORCA_POLL_INTERVAL"
-done
-((ready == 1)) || spawn_fail "readiness marker '$ready_marker' never appeared (agent did not come up)."
-
-# --- 7. mode step (optional; cycle until the target marker appears) --------
+# --- 6. mode step (optional; cycle until the target marker appears) ---------
 if [[ "$mode" == cycle ]]; then
   mode_key=$("$ORCA_ADAPTER" "$agent" mode-key)
   mode_target=$("$ORCA_ADAPTER" "$agent" mode-target)
   mode_max=$("$ORCA_ADAPTER" "$agent" mode-max-attempts)
-  attempts=0
-  while true; do
-    screen=$(read_worker_screen)
-    if grep -qF -- "$mode_target" <<<"$screen"; then break; fi
-    if ((attempts >= mode_max)); then
-      spawn_fail "mode never reached '$mode_target' after $mode_max attempts."
-    fi
-    "$ORCA_CMUX" send-key --surface "$SURFACE" "$mode_key" >/dev/null \
-      || spawn_fail "failed to send the mode key '$mode_key'"
-    attempts=$((attempts + 1))
-    sleep "$ORCA_MODE_INTERVAL"
-  done
+  orca_cycle_mode "$SURFACE" "$mode_key" "$mode_target" "$mode_max" \
+    || spawn_fail "$ORCA_LAUNCH_REASON"
 fi
 
-# --- 8. deliver the brief by pointer ---------------------------------------
+# --- 7. deliver the brief by pointer ---------------------------------------
 # Anchor the event stream before the brief lands so fire-and-follow is race-free.
 AFTER_SEQ=$(capture_event_anchor)
 delivery=$(append_parent_footer "Read $BRIEF_REL and carry out the task it describes.")
@@ -385,7 +321,7 @@ delivery=$(append_parent_footer "Read $BRIEF_REL and carry out the task it descr
 "$ORCA_CMUX" send-key --surface "$SURFACE" enter >/dev/null \
   || spawn_fail "failed to send enter after the brief"
 
-# --- 9. report back --------------------------------------------------------
+# --- 8. report back --------------------------------------------------------
 printf 'status=ok\n'
 printf 'task_id=%s\n' "$TASK_ID"
 printf 'workspace=%s\n' "$WORKSPACE"
@@ -395,4 +331,6 @@ printf 'surface=%s\n' "$SURFACE"
 printf 'tab=%s\n' "$TASK_ID"
 printf 'cwd=%s\n' "$CWD"
 printf 'brief=%s\n' "$BRIEF_REL"
-[[ -n "$AFTER_SEQ" ]] && printf 'after_seq=%s\n' "$AFTER_SEQ"
+if [[ -n "$AFTER_SEQ" ]]; then
+  printf 'after_seq=%s\n' "$AFTER_SEQ"
+fi

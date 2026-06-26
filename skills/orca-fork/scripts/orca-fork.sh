@@ -29,6 +29,8 @@ ORCA_ADAPTER="$BIN_DIR/orca-fork-adapter.sh"
 . "$BIN_DIR/orca-trust-prompt.sh"
 # shellcheck source=skills/orca-fork/scripts/orca-upgrade-prompt.sh
 . "$BIN_DIR/orca-upgrade-prompt.sh"
+# shellcheck source=skills/orca-fork/scripts/orca-launch.sh
+. "$BIN_DIR/orca-launch.sh"
 
 export CMUX_BIN=${CMUX_BIN:-cmux}
 
@@ -93,30 +95,6 @@ slugify() {
 validate_uuid() {
   local label=$1 value=$2
   [[ "$value" =~ $UUID_RE ]] || die "$label must be a UUID: $value"
-}
-
-is_ready() {
-  local screen=$1
-  case "$PROVIDER" in
-    codex)
-      grep -qF -- "$ready_marker" <<<"$screen" && grep -qF -- " · " <<<"$screen"
-      ;;
-    claude)
-      grep -qF -- "$ready_marker" <<<"$screen"
-      ;;
-    *)
-      return 1
-      ;;
-  esac
-}
-
-read_fork_screen() {
-  local out
-  if ! out=$("$ORCA_CMUX" read-screen --surface "$SURFACE" --lines 40 2>&1); then
-    out=${out//$'\n'/ }
-    fork_fail "failed to read fork screen: $out"
-  fi
-  printf '%s\n' "$out"
 }
 
 resolve_origin_surface() {
@@ -255,42 +233,8 @@ SURFACE=$("$ORCA_CMUX" create-tab --workspace "$ws" --cwd "$CWD" 2>/dev/null) \
 
 "$CMUX_BIN" rename-tab --surface "$SURFACE" "$TAB" >/dev/null 2>&1 || true
 
-"$ORCA_CMUX" send --surface "$SURFACE" "$launch" >/dev/null \
-  || fork_fail "failed to send the fork command"
-"$ORCA_CMUX" send-key --surface "$SURFACE" enter >/dev/null \
-  || fork_fail "failed to send enter after fork command"
-
-ready=0
-for ((p = 0; p < ORCA_READY_POLLS; p++)); do
-  screen=$(read_fork_screen)
-  if orca_maybe_accept_trust_prompt "$screen" "$SURFACE"; then
-    sleep "$ORCA_POLL_INTERVAL"
-    continue
-  else
-    trust_rc=$?
-    case "$trust_rc" in
-      1) ;;
-      2) fork_fail "failed to answer the trust prompt" ;;
-      3) fork_fail "failed to submit the trust prompt answer" ;;
-      *) fork_fail "failed to handle the trust prompt" ;;
-    esac
-  fi
-  if orca_maybe_dismiss_upgrade_prompt "$screen" "$SURFACE"; then
-    sleep "$ORCA_POLL_INTERVAL"
-    continue
-  else
-    upgrade_rc=$?
-    case "$upgrade_rc" in
-      1) ;;
-      2) fork_fail "failed to answer the upgrade prompt" ;;
-      3) fork_fail "failed to submit the upgrade prompt answer" ;;
-      *) fork_fail "failed to handle the upgrade prompt" ;;
-    esac
-  fi
-  if is_ready "$screen"; then ready=1; break; fi
-  sleep "$ORCA_POLL_INTERVAL"
-done
-((ready == 1)) || fork_fail "readiness marker '$ready_marker' never appeared (fork did not come ready)."
+orca_launch_to_ready "$SURFACE" "$launch" "$PROVIDER" "$ready_marker" \
+  || fork_fail "$ORCA_LAUNCH_REASON"
 
 printf 'status=ok\n'
 emit_known

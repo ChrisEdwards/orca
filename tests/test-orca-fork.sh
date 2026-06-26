@@ -318,7 +318,7 @@ DEFAULT_CWD="$WORK6"; SCENARIO=read-screen-error; AUTO_CODEX="$CODEX_ID"
 fork_run
 ok  "read-screen error: exits non-zero"    rc_not 0
 ok  "read-screen error: status=error"      eq "$(field status)" error
-ok  "read-screen error: reports read"      mentions "failed to read fork screen"
+ok  "read-screen error: reports read"      mentions "failed to read worker screen"
 
 # === cmux unreachable fails before tab creation ============================
 DEFAULT_CWD="$WORK"; SCENARIO=cmux-down; AUTO_CODEX="$CODEX_ID"
