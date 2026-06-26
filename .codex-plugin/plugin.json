@@ -1,7 +1,7 @@
 {
   "name": "orca",
   "version": "0.1.9",
-  "description": "Spawn, fork, message, or follow Claude Code and Codex agent instances in cmux tabs from Codex.",
+  "description": "Spawn, fork, message, follow, or orchestrate Claude Code and Codex agent instances in cmux tabs from Codex.",
   "author": {
     "name": "Chris Edwards",
     "url": "https://github.com/ChrisEdwards"
@@ -18,8 +18,8 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "Orca",
-    "shortDescription": "Spawn, fork, or message Claude Code and Codex agent instances in cmux tabs.",
-    "longDescription": "Orca packages skills for launching fresh AI coding workers, forking existing provider conversations into cmux tabs, or messaging an existing agent surface.",
+    "shortDescription": "Spawn, fork, message, follow, or orchestrate Claude Code and Codex agents in cmux tabs.",
+    "longDescription": "Orca packages skills for launching fresh AI coding workers, forking existing provider conversations into cmux tabs, messaging existing agent surfaces, following workers to completion, and running multi-step workflows.",
     "developerName": "Chris Edwards",
     "category": "Coding",
     "capabilities": [
@@ -32,7 +32,8 @@
       "Spawn a Codex worker for this task",
       "Hand this bug to Claude Code in cmux",
       "Fork this Codex conversation in a new cmux tab",
-      "Send a follow-up to the Claude agent in this workspace"
+      "Send a follow-up to the Claude agent in this workspace",
+      "Ship this fix end to end as a reviewed draft PR"
     ],
     "brandColor": "#2F7D80"
   }

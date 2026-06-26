@@ -8,9 +8,12 @@ set -u
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
+SKILLS_DIR="$REPO_ROOT/skills"
+EXPECTED_SKILLS=(orca-spawn orca-fork orca-msg orca-watch orca-workflow orca-ship)
 SPAWN_SKILL_DIR="$REPO_ROOT/skills/orca-spawn"
 FORK_SKILL_DIR="$REPO_ROOT/skills/orca-fork"
 MSG_SKILL_DIR="$REPO_ROOT/skills/orca-msg"
+WATCH_SKILL_DIR="$REPO_ROOT/skills/orca-watch"
 WORKFLOW_SKILL_DIR="$REPO_ROOT/skills/orca-workflow"
 CODEX_SPAWN_SKILL_LINK="$REPO_ROOT/.agents/skills/orca-spawn"
 CODEX_FORK_SKILL_LINK="$REPO_ROOT/.agents/skills/orca-fork"
@@ -30,6 +33,16 @@ eq() { [[ "$1" == "$2" ]]; }
 json_get() { jq -er "$2" "$1"; }
 valid_json() { jq -e . "$1" >/dev/null; }
 does_not_contain() { ! grep -qF "$1" "$2"; }
+
+expected_skill_set=$(printf '%s\n' "${EXPECTED_SKILLS[@]}" | sort)
+actual_skill_set=$(find "$SKILLS_DIR" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort)
+ok "shipped skills exactly match expected package list" eq "$actual_skill_set" "$expected_skill_set"
+
+for skill in "${EXPECTED_SKILLS[@]}"; do
+  skill_dir="$SKILLS_DIR/$skill"
+  ok "$skill skill directory exists" test -d "$skill_dir"
+  ok "$skill SKILL.md exists" test -f "$skill_dir/SKILL.md"
+done
 
 for script in orca-adapter.sh orca-cmux.sh orca-spawn.sh orca-trust-prompt.sh orca-upgrade-prompt.sh orca-launch.sh; do
   path="$SPAWN_SKILL_DIR/scripts/$script"
@@ -52,6 +65,32 @@ for script in orca-cmux.sh orca-msg.sh; do
   ok "orca-msg/$script: bash syntax is valid" bash -n "$path"
 done
 
+for script in orca-watch.sh; do
+  path="$WATCH_SKILL_DIR/scripts/$script"
+  ok "orca-watch/$script: exists in skill scripts" test -f "$path"
+  ok "orca-watch/$script: is executable" test -x "$path"
+  ok "orca-watch/$script: bash syntax is valid" bash -n "$path"
+done
+
+for script in orca-workflow-init.sh; do
+  path="$WORKFLOW_SKILL_DIR/scripts/$script"
+  ok "orca-workflow/$script: exists in skill scripts" test -f "$path"
+  ok "orca-workflow/$script: is executable" test -x "$path"
+  ok "orca-workflow/$script: bash syntax is valid" bash -n "$path"
+done
+
+for skill in "${EXPECTED_SKILLS[@]}"; do
+  scripts_dir="$SKILLS_DIR/$skill/scripts"
+  if [[ -d "$scripts_dir" ]]; then
+    while IFS= read -r path; do
+      script=$(basename "$path")
+      ok "$skill/$script: bundled script exists" test -f "$path"
+      ok "$skill/$script: bundled script is executable" test -x "$path"
+      ok "$skill/$script: bundled script bash syntax is valid" bash -n "$path"
+    done < <(find "$scripts_dir" -maxdepth 1 -type f -name '*.sh' | sort)
+  fi
+done
+
 list=$("$SPAWN_SKILL_DIR/scripts/orca-adapter.sh" list 2>/dev/null)
 ok "bundled adapter lists known agents" eq "$list" $'claude\ncodex'
 fork_list=$("$FORK_SKILL_DIR/scripts/orca-fork-adapter.sh" list 2>/dev/null)
@@ -62,6 +101,8 @@ ok "orca-spawn instructions prefer final response for worker findings" grep -qF 
 ok "orca-spawn instructions route durable artifacts to tmp" grep -qF 'If a durable handoff or artifact is genuinely useful, put it outside the repo under `${TMPDIR:-/tmp}/orca/<task-id>/`, and report the absolute path back to the human.' "$SPAWN_SKILL_DIR/SKILL.md"
 ok "orca-fork instructions point at bundled fork script" grep -qF "scripts/orca-fork.sh" "$FORK_SKILL_DIR/SKILL.md"
 ok "orca-msg instructions point at bundled message script" grep -qF "scripts/orca-msg.sh" "$MSG_SKILL_DIR/SKILL.md"
+ok "orca-watch instructions point at bundled watch script" grep -qF "scripts/orca-watch.sh" "$WATCH_SKILL_DIR/SKILL.md"
+ok "orca-workflow instructions point at bundled workflow init script" grep -qF "scripts/orca-workflow-init.sh" "$WORKFLOW_SKILL_DIR/SKILL.md"
 ok "orca-workflow SKILL.md avoids sibling skill script paths" does_not_contain "orca-cmux.sh" "$WORKFLOW_SKILL_DIR/SKILL.md"
 ok "orca-workflow SKILL.md avoids sibling skill phrasing" does_not_contain "from the orca-spawn skill" "$WORKFLOW_SKILL_DIR/SKILL.md"
 ok "Codex orca-spawn project skill entry exists" test -L "$CODEX_SPAWN_SKILL_LINK"
@@ -90,6 +131,9 @@ ok "Codex plugin skills path resolves" test -d "$REPO_ROOT/$(json_get "$PLUGIN_M
 ok "Codex plugin includes orca-spawn skill" test -f "$REPO_ROOT/$(json_get "$PLUGIN_MANIFEST" '.skills')/orca-spawn/SKILL.md"
 ok "Codex plugin includes orca-fork skill" test -f "$REPO_ROOT/$(json_get "$PLUGIN_MANIFEST" '.skills')/orca-fork/SKILL.md"
 ok "Codex plugin includes orca-msg skill" test -f "$REPO_ROOT/$(json_get "$PLUGIN_MANIFEST" '.skills')/orca-msg/SKILL.md"
+for skill in "${EXPECTED_SKILLS[@]}"; do
+  ok "Codex plugin includes $skill skill" test -f "$REPO_ROOT/$(json_get "$PLUGIN_MANIFEST" '.skills')/$skill/SKILL.md"
+done
 
 ok "Codex marketplace exists" test -f "$MARKETPLACE"
 ok "Codex marketplace is valid JSON" valid_json "$MARKETPLACE"
@@ -106,6 +150,9 @@ ok "Claude plugin skills path resolves" test -d "$REPO_ROOT/$(json_get "$CLAUDE_
 ok "Claude plugin includes orca-spawn skill" test -f "$REPO_ROOT/$(json_get "$CLAUDE_PLUGIN_MANIFEST" '.skills')/orca-spawn/SKILL.md"
 ok "Claude plugin includes orca-fork skill" test -f "$REPO_ROOT/$(json_get "$CLAUDE_PLUGIN_MANIFEST" '.skills')/orca-fork/SKILL.md"
 ok "Claude plugin includes orca-msg skill" test -f "$REPO_ROOT/$(json_get "$CLAUDE_PLUGIN_MANIFEST" '.skills')/orca-msg/SKILL.md"
+for skill in "${EXPECTED_SKILLS[@]}"; do
+  ok "Claude plugin includes $skill skill" test -f "$REPO_ROOT/$(json_get "$CLAUDE_PLUGIN_MANIFEST" '.skills')/$skill/SKILL.md"
+done
 
 ok "Claude marketplace exists" test -f "$CLAUDE_MARKETPLACE"
 ok "Claude marketplace is valid JSON" valid_json "$CLAUDE_MARKETPLACE"

@@ -1,20 +1,25 @@
 # Orca
 
-Orca packages skills for spawning, forking, and messaging Claude Code or Codex
-agent instances in cmux tabs.
+Orca packages skills for spawning, forking, messaging, following, and
+orchestrating Claude Code or Codex agent instances in cmux tabs.
 
-The plugin includes three skills:
+The plugin includes six skills:
 
 - `orca-spawn` launches one worker for one task, waits for the worker to reach
-  its ready state, gives it a self-contained brief, and reports the resulting
-  cmux workspace and surface. By default it uses the calling workspace; callers
-  can also target an existing workspace by UUID, select or create a workspace
-  by exact name, and override the worker working directory with `--cwd`.
+  its ready state, gives it a self-contained brief, and reports the cmux
+  workspace, surface, and follow anchor.
 - `orca-fork` forks an existing Codex or Claude Code conversation into a new
   cmux tab, preserving conversation history, and reports the resulting surface.
 - `orca-msg` delivers a follow-up message to an existing agent instance in a
   cmux surface, using either a pasted `surface_id` or a human target
   description that resolves to one surface.
+- `orca-watch` waits for an already-spawned Claude Code or Codex worker to
+  finish its turn or pause for attention, using the cmux event stream for
+  fire-and-follow orchestration.
+- `orca-workflow` runs multi-step, multi-agent workflows through fresh workers
+  in cmux tabs, passing context between steps through handoff files.
+- `orca-ship` drives one change from a fresh branch through implementation,
+  review-until-clean, and a draft PR across Claude Code and Codex workers.
 
 ## Install In Codex
 
@@ -115,8 +120,9 @@ claude --plugin-dir . --print "List available Orca skills."
 ```
 
 Claude Code namespaces plugin skills by plugin name. The current skills are
-available as `/orca:orca-spawn`, `/orca:orca-fork`, and `/orca:orca-msg` after
-the plugin is installed or loaded.
+available as `/orca:orca-spawn`, `/orca:orca-fork`, `/orca:orca-msg`,
+`/orca:orca-watch`, `/orca:orca-workflow`, and `/orca:orca-ship` after the
+plugin is installed or loaded.
 
 Validate the Claude plugin and marketplace manifests:
 
