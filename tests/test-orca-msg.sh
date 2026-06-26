@@ -215,6 +215,33 @@ mentions() { grep -qiF -- "$1" <<<"$LAST_OUT"$'\n'"$LAST_ERR"; }
 rc_is() { [[ "$LAST_RC" -eq "$1" ]]; }
 rc_not() { [[ "$LAST_RC" -ne "$1" ]]; }
 eq() { [[ "$1" == "$2" ]]; }
+send_payload_for_surface() {
+  local surface=$1
+  awk -v prefix="send\t--surface\t$surface\t" '
+    BEGIN { capturing = 0; found = 0; payload = "" }
+    index($0, prefix) == 1 {
+      capturing = 1
+      found = 1
+      payload = substr($0, length(prefix) + 1)
+      next
+    }
+    capturing && $0 ~ /^(send|send-key|read-screen|identify|list-workspaces|list-pane-surfaces)(\t|$)/ {
+      print payload
+      capturing = 0
+      exit
+    }
+    capturing { payload = payload "\n" $0 }
+    END {
+      if (capturing) print payload
+      else if (!found) exit 1
+    }
+  ' "$CALLS"
+}
+send_payload_eq() {
+  local surface=$1 want=$2 got
+  got=$(send_payload_for_surface "$surface") || return 1
+  [[ "$got" == "$want" ]]
+}
 
 with_footer() {
   printf '%s\n[From the agent at surface %s. To reply, use the orca-msg skill targeting that surface if needed.]' "$1" "$SFC_ORIGIN"
@@ -396,6 +423,22 @@ msg_run --surface "$SFC_CLAUDE" --agent claude --message "$TEXT"
 ok  "direct multiline: exits 0"          rc_is 0
 ok  "direct multiline: preserves argv" \
       calls_have_line $'send\t--surface\t'"$SFC_CLAUDE"$'\t'"$(with_footer "$TEXT")"
+
+# === Dash-prefixed direct messages are delivered as literal text ===========
+SCENARIO=happy
+TEXT=$'- bullet\n--flag'
+msg_run --surface "$SFC_CLAUDE" --agent claude --message "$TEXT"
+ok  "direct dash-prefixed: exits 0"      rc_is 0
+ok  "direct dash-prefixed: sends exact payload" \
+      send_payload_eq "$SFC_CLAUDE" "$(with_footer "$TEXT")"
+
+# === Intentional blank lines are preserved through message delivery ========
+SCENARIO=happy
+TEXT=$'Paragraph one\n\nParagraph two\n\n\n```diff\n+added\n```'
+msg_run --surface "$SFC_CLAUDE" --agent claude --message "$TEXT"
+ok  "direct blank lines: exits 0"        rc_is 0
+ok  "direct blank lines: sends exact payload" \
+      send_payload_eq "$SFC_CLAUDE" "$(with_footer "$TEXT")"
 
 # === Message-file flow sends an absolute path and leaves the file ==========
 MESSAGE_FILE="$TMP/message.md"

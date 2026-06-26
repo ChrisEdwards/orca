@@ -164,15 +164,33 @@ orca send --surface "$SFC" "claude --some flag" >/dev/null
 assert_args "send keeps spaced text as one argv element" \
   send --surface "$SFC" "claude --some flag"
 
-# send collapses consecutive newlines because cmux treats newlines as Enter.
+# send accepts dash-prefixed payloads as exact text, not parser options.
+orca send --surface "$SFC" "- bullet" >/dev/null
+assert_args "send accepts dash-prefixed text" \
+  send --surface "$SFC" "- bullet"
+
+orca send --surface "$SFC" "--flag value" >/dev/null
+assert_args "send accepts double-dash-prefixed text" \
+  send --surface "$SFC" "--flag value"
+
+orca send --surface "$SFC" -- "--explicit separator" >/dev/null
+assert_args "send still supports explicit option separator" \
+  send --surface "$SFC" "--explicit separator"
+
+# send preserves intentional blank lines verbatim.
 orca send --surface "$SFC" $'alpha\n\nbeta\n\n\ngamma' >/dev/null
-assert_args "send collapses blank lines before cmux" \
-  send --surface "$SFC" $'alpha\nbeta\ngamma'
+assert_args "send preserves blank lines before cmux" \
+  send --surface "$SFC" $'alpha\n\nbeta\n\n\ngamma'
 
 # send-key emits the verified send-key command; the literal "shift+tab" passes through.
 orca send-key --surface "$SFC" "shift+tab" >/dev/null
 assert_args "send-key emits verified send-key command" \
   send-key --surface "$SFC" "shift+tab"
+
+# send-key also treats dash-prefixed payloads as keys instead of options.
+orca send-key --surface "$SFC" "--literal-key" >/dev/null
+assert_args "send-key accepts dash-prefixed key payload" \
+  send-key --surface "$SFC" "--literal-key"
 
 # read-screen defaults to 40 lines and streams cmux output back.
 rs=$(orca read-screen --surface "$SFC")
