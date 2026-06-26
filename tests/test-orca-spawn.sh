@@ -52,6 +52,15 @@ case "$sub" in
     printf '{ "caller": { "window_id": "%s", "workspace_id": "%s", "surface_id": "%s" } }\n' "$FAKE_WINDOW" "$FAKE_WS" "$FAKE_ORIGIN_SURFACE"
     ;;
   list-workspaces|workspace)
+    # Non-JSON table form is used only to resolve a freshly-created workspace ref
+    # (cmux no longer prints the UUID on create). Include every fake workspace so
+    # the resolver can find whichever ref it just created.
+    if [[ "$*" != *"--json"* ]]; then
+      printf '  workspace:9 %s  caller\n' "$FAKE_WS"
+      printf '  workspace:10 %s  aiml-services\n' "$FAKE_TARGET_WS"
+      printf '* workspace:12 %s  new-repo  [selected]\n' "$FAKE_CREATED_WS"
+      exit 0
+    fi
     case "${FAKE_WORKSPACE_MODE:-default}" in
       existing-name)
         printf '{ "workspaces": ['
@@ -80,7 +89,9 @@ case "$sub" in
     esac
     ;;
   new-workspace)
-    echo "OK workspace:12 ($FAKE_CREATED_WS) surface:50 (INITIAL-SURFACE-UUID)"
+    # cmux >= 0.64 echoes only the new workspace's positional ref; the UUID is
+    # recovered from the non-JSON workspace list above.
+    echo "OK workspace:12"
     ;;
   new-surface)
     echo "OK surface:43 ($FAKE_SURFACE) pane:16 (PANE-UUID) workspace:9 ($FAKE_WS)"

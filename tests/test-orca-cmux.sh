@@ -34,7 +34,9 @@ case "$1" in
     echo "OK surface:43 (${FAKE_SURFACE_UUID:-AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE}) pane:16 (PPPPPPPP-0000-0000-0000-000000000000) workspace:9 (WWWWWWWW-0000-0000-0000-000000000000)"
     ;;
   new-workspace)
-    echo "OK workspace:9 (${FAKE_WORKSPACE_UUID:-11111111-2222-3333-4444-555555555555}) surface:43 (${FAKE_SURFACE_UUID:-AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE})"
+    # cmux >= 0.64 prints only the new workspace's positional ref, never its UUID,
+    # even with --id-format both. The UUID is recovered via list-workspaces.
+    echo "OK workspace:9"
     ;;
   identify)
     echo '{ "caller": { "surface_id": "ORIGIN-SURFACE", "workspace_id": "ORIGIN-WORKSPACE" } }'
@@ -43,7 +45,12 @@ case "$1" in
     printf 'line one\nline two\n'
     ;;
   list-workspaces)
-    echo '{ "workspaces": [] }'
+    if [[ "$*" == *"--json"* ]]; then
+      echo '{ "workspaces": [] }'
+    else
+      # Non-JSON table form: "[*] <ref> <uuid>  <title>", one row per workspace.
+      echo "* workspace:9 ${FAKE_WORKSPACE_UUID:-11111111-2222-3333-4444-555555555555}  aiml-services  [selected]"
+    fi
     ;;
   list-pane-surfaces)
     if [[ "$*" == *"--json"* ]]; then
@@ -86,6 +93,15 @@ orca() {
 # The argv of the most recent cmux invocation, one arg per line.
 recorded_args() { cut -f2- < "$CALL_LOG" | grep -v '^CALL$' || true; }
 
+# The argv of the Nth recorded cmux invocation (1-based), one arg per line.
+# Splits on tab so argument values that contain spaces survive intact.
+recorded_args_n() {
+  awk -v n="$1" -F'\t' '
+    $0 == "CALL" { c++; next }
+    c == n && $1 == "ARG" { print $2 }
+  ' "$CALL_LOG"
+}
+
 assert_args() {
   local desc="$1"; shift
   local expected actual
@@ -127,11 +143,16 @@ orca create-tab --workspace "$WS" --cwd "/tmp/project with spaces" >/dev/null
 assert_args "create-tab passes cwd as working-directory" \
   new-surface --type terminal --workspace "$WS" --working-directory "/tmp/project with spaces" --focus false --id-format both
 
-# create-workspace builds the verified no-focus workspace command and returns the workspace UUID.
+# create-workspace builds the verified no-focus workspace command, then resolves
+# the ref-only create output to a stable UUID via the workspace list.
 out=$(orca create-workspace --name "aiml-services" --cwd "/tmp/aiml services" --window "$WIN")
-assert_args "create-workspace emits verified new-workspace command" \
-  new-workspace --name "aiml-services" --cwd "/tmp/aiml services" --window "$WIN" --focus false --id-format both
-assert_eq "create-workspace returns parsed workspace UUID" "$NEW_WS" "$out"
+assert_eq "create-workspace emits verified new-workspace command" \
+  "$(printf '%s\n' new-workspace --name "aiml-services" --cwd "/tmp/aiml services" --window "$WIN" --focus false --id-format both)" \
+  "$(recorded_args_n 1)"
+assert_eq "create-workspace resolves the ref via the workspace list" \
+  "$(printf '%s\n' list-workspaces --id-format both)" \
+  "$(recorded_args_n 2)"
+assert_eq "create-workspace returns resolved workspace UUID" "$NEW_WS" "$out"
 
 # send emits the verified send command, text addressed by surface UUID.
 orca send --surface "$SFC" "echo hello" >/dev/null

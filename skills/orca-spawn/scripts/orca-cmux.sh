@@ -65,6 +65,29 @@ parse_first_uuid() {
   printf '%s\n' "$uuid"
 }
 
+# parse_first_ref <output> <noun>
+# Pull the first positional ref of the given noun (e.g. "workspace:9") out of a
+# line of cmux output. Refs drift over a session, so this is only a stepping
+# stone to a UUID, never a target in its own right.
+parse_first_ref() {
+  local out=$1 noun=$2 ref
+  ref=$(printf '%s\n' "$out" | grep -oE "${noun}:[0-9]+" | head -1) || true
+  [[ -n "$ref" ]] || return 1
+  printf '%s\n' "$ref"
+}
+
+# resolve_workspace_uuid <workspace-ref>
+# Map a positional workspace ref to its stable UUID by reading the workspace
+# list. Newer cmux echoes only the ref when creating a workspace, so this bridges
+# back to the UUID-only invariant (ADR 0002) the rest of orca depends on.
+resolve_workspace_uuid() {
+  local ref=$1 uuid
+  uuid=$(cmux_exec list-workspaces --id-format both 2>/dev/null \
+    | awk -v ref="$ref" '{ for (i = 1; i <= NF; i++) if ($i == ref) { print $(i + 1); exit } }') || true
+  [[ "$uuid" =~ $UUID_RE ]] || return 1
+  printf '%s\n' "$uuid"
+}
+
 # create_tab <workspace-uuid> [cwd]
 # Creates a plain terminal surface in the given workspace and prints its stable
 # surface UUID. Uses --focus false so spawning never steals the human's focus.
@@ -81,10 +104,20 @@ create_tab() {
 }
 
 create_workspace() {
-  local name=$1 cwd=$2 window=$3 out uuid
+  local name=$1 cwd=$2 window=$3 out uuid ref
   out=$(cmux_exec new-workspace --name "$name" --cwd "$cwd" --window "$window" --focus false --id-format both)
-  # Output starts with the created workspace, followed by its initial surface.
-  uuid=$(parse_first_uuid "$out") || die "could not parse a workspace UUID from cmux output: $out"
+  # Older cmux printed the new workspace's UUID in parentheses; newer builds emit
+  # only its positional ref ("OK workspace:N"), even with --id-format both. Take a
+  # directly-parsed UUID when one is present, otherwise resolve the ref through the
+  # workspace list so callers always receive a stable UUID.
+  if uuid=$(parse_first_uuid "$out"); then
+    printf '%s\n' "$uuid"
+    return 0
+  fi
+  ref=$(parse_first_ref "$out" workspace) \
+    || die "could not parse a workspace UUID or ref from cmux output: $out"
+  uuid=$(resolve_workspace_uuid "$ref") \
+    || die "could not resolve created workspace $ref to a UUID from the workspace list"
   printf '%s\n' "$uuid"
 }
 
