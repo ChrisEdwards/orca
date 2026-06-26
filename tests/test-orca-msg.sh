@@ -197,7 +197,7 @@ SCENARIO=happy
 msg_run() {
   : > "$CALLS"
   local errfile="$TMP/stderr"
-  LAST_OUT=$(CMUX_BIN="$FAKE" FAKE_CALLS="$CALLS" FAKE_SCENARIO="$SCENARIO" \
+  LAST_OUT=$(TMPDIR="${TMPDIR:-}" CMUX_BIN="$FAKE" FAKE_CALLS="$CALLS" FAKE_SCENARIO="$SCENARIO" \
     FAKE_WS_AIML="$WS_AIML" FAKE_WS_OTHER="$WS_OTHER" \
     FAKE_SFC_CLAUDE="$SFC_CLAUDE" FAKE_SFC_CODEX="$SFC_CODEX" FAKE_SFC_OTHER="$SFC_OTHER" \
     FAKE_SFC_ORIGIN="$SFC_ORIGIN" \
@@ -242,6 +242,7 @@ send_payload_eq() {
   got=$(send_payload_for_surface "$surface") || return 1
   [[ "$got" == "$want" ]]
 }
+has_orca_msg_temp() { find "$1" -maxdepth 1 -name 'orca-msg-*' -print -quit | grep -q .; }
 
 with_footer() {
   printf '%s\n[From the agent at surface %s. To reply, use the orca-msg skill targeting that surface if needed.]' "$1" "$SFC_ORIGIN"
@@ -283,7 +284,9 @@ no  "refs only: does not send"          called_subcommand send
 
 # === Descriptor resolution succeeds for one matching surface ===============
 SCENARIO=happy
-msg_run --target "the Claude agent in the aiml-services workspace" --message "Review the decision."
+DESCRIPTOR_TMPDIR="$TMP/descriptor-success-tmp"
+mkdir "$DESCRIPTOR_TMPDIR"
+TMPDIR="$DESCRIPTOR_TMPDIR" msg_run --target "the Claude agent in the aiml-services workspace" --message "Review the decision."
 
 ok  "descriptor: exits 0"               rc_is 0
 ok  "descriptor: status=ok"             eq "$(field status)" ok
@@ -292,16 +295,20 @@ ok  "descriptor: listed workspaces"      called_subcommand list-workspaces
 ok  "descriptor: listed surfaces"        called_subcommand list-pane-surfaces
 ok  "descriptor: sends message" \
       calls_have_line $'send\t--surface\t'"$SFC_CLAUDE"$'\t'"$(with_footer "Review the decision.")"
+no  "descriptor: cleans temp files"      has_orca_msg_temp "$DESCRIPTOR_TMPDIR"
 
 # === Ambiguous descriptor reports candidates and does not send =============
 SCENARIO=descriptor-ambiguous
-msg_run --target "the Claude agent in the aiml-services workspace" --message "Pick one?"
+AMBIGUOUS_TMPDIR="$TMP/descriptor-ambiguous-tmp"
+mkdir "$AMBIGUOUS_TMPDIR"
+TMPDIR="$AMBIGUOUS_TMPDIR" msg_run --target "the Claude agent in the aiml-services workspace" --message "Pick one?"
 
 ok  "ambiguous: exits non-zero"         rc_not 0
 ok  "ambiguous: status"                 eq "$(field status)" needs_clarification
 ok  "ambiguous: includes first candidate" mentions "$SFC_CLAUDE"
 ok  "ambiguous: includes second candidate" mentions "$SFC_OTHER"
 no  "ambiguous: does not send"          called_subcommand send
+no  "ambiguous: cleans temp files"       has_orca_msg_temp "$AMBIGUOUS_TMPDIR"
 
 # === Codex readiness can be inferred from screen text ======================
 SCENARIO=happy

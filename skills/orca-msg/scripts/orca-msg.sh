@@ -27,6 +27,7 @@ MESSAGE_FILE_ABS=""
 ORIGIN_SURFACE=""
 HAVE_MESSAGE=0
 HAVE_MESSAGE_FILE=0
+ORCA_MSG_DESCRIPTOR_TMPDIR=""
 
 die() {
   local msg=$1
@@ -53,6 +54,13 @@ need_clarification() {
   fi
   printf 'orca-msg: %s\n' "$msg" >&2
   exit 2
+}
+
+cleanup_descriptor_tmpdir() {
+  local tmpdir=${ORCA_MSG_DESCRIPTOR_TMPDIR:-}
+  [[ -n "$tmpdir" ]] || return 0
+  rm -rf "$tmpdir"
+  ORCA_MSG_DESCRIPTOR_TMPDIR=""
 }
 
 need_value() {
@@ -293,16 +301,22 @@ workspace_matches() {
 }
 
 resolve_descriptor() {
-  local descriptor=$1 desc_lc hint workspaces workspace_rows selected_ws selected_count
-  local candidates all_candidates candidate_count sfc detected screen
+  local descriptor=$1 desc_lc hint descriptor_tmpdir workspaces workspace_rows selected_ws selected_count
+  local candidates all_candidates candidate_count sfc detected screen surfaces_json
   desc_lc=$(lower "$descriptor")
   hint=${AGENT:-$(agent_hint_from_text "$descriptor")}
 
-  workspaces=$(mktemp "${TMPDIR:-/tmp}/orca-msg-workspaces.XXXXXX") || die "could not create temp file"
-  workspace_rows=$(mktemp "${TMPDIR:-/tmp}/orca-msg-workspace-rows.XXXXXX") || die "could not create temp file"
-  selected_ws=$(mktemp "${TMPDIR:-/tmp}/orca-msg-selected-workspaces.XXXXXX") || die "could not create temp file"
-  candidates=$(mktemp "${TMPDIR:-/tmp}/orca-msg-candidates.XXXXXX") || die "could not create temp file"
-  all_candidates=$(mktemp "${TMPDIR:-/tmp}/orca-msg-all-candidates.XXXXXX") || die "could not create temp file"
+  descriptor_tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/orca-msg-descriptor.XXXXXX") || die "could not create temp directory"
+  ORCA_MSG_DESCRIPTOR_TMPDIR=$descriptor_tmpdir
+  trap cleanup_descriptor_tmpdir EXIT
+
+  workspaces="$descriptor_tmpdir/workspaces"
+  workspace_rows="$descriptor_tmpdir/workspace-rows"
+  selected_ws="$descriptor_tmpdir/selected-workspaces"
+  candidates="$descriptor_tmpdir/candidates"
+  all_candidates="$descriptor_tmpdir/all-candidates"
+  : > "$candidates" || die "could not create temp file"
+  : > "$all_candidates" || die "could not create temp file"
 
   if ! "$ORCA_CMUX" list-workspaces-json > "$workspaces" 2>/dev/null; then
     die "could not list cmux workspaces"
@@ -326,7 +340,7 @@ resolve_descriptor() {
 
   while IFS=$'\t' read -r ws_id ws_ref ws_title ws_custom ws_cwd; do
     [[ -n "$ws_id" ]] || continue
-    surfaces_json=$(mktemp "${TMPDIR:-/tmp}/orca-msg-surfaces.XXXXXX") || die "could not create temp file"
+    surfaces_json=$(mktemp "$descriptor_tmpdir/surfaces.XXXXXX") || die "could not create temp file"
     if ! "$ORCA_CMUX" list-surfaces-json --workspace "$ws_id" > "$surfaces_json" 2>/dev/null; then
       rm -f "$surfaces_json"
       continue
@@ -358,6 +372,7 @@ resolve_descriptor() {
   IFS='|' read -r sfc detected _rest < "$candidates"
   SURFACE=$sfc
   [[ -n "$AGENT" ]] || AGENT=${detected:-$hint}
+  cleanup_descriptor_tmpdir
 }
 
 # --- parse arguments -------------------------------------------------------
