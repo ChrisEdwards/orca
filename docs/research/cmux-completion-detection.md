@@ -110,6 +110,28 @@ spawn-to-watch handoff. This confirms the live Codex path and the race-free
 anchor. The smoke also surfaced the Codex-vs-Claude store-shape difference noted
 above, which the resolver now handles.
 
+Slice 3 orca-ship MVP, verified live end to end in a fresh throwaway git repo
+(cmux 0.64.x): `orca-ship-init.sh` set up the task/handoff dirs, then the
+SKILL.md loop drove `implement(codex) -> review(claude) -> gate`. The Codex
+implementer edited `calc.py` (added `add(a, b)`), left it uncommitted, and wrote
+`implementation.md` as its final action; `orca-watch --after` caught its
+`turn_end` (Stop, seq 26519). The orchestrator built the review brief referencing
+that handoff and spawned a Claude reviewer in the same repo, which read the diff,
+wrote `review-1.json` (`[]`, clean), and reached `turn_end` (Stop, seq 26648)
+**with no trust-prompt block** — confirming the orca-kup "created or one you
+trust" fix. Empty findings tripped the gate to PASS, so no fix round ran. This is
+the first proof of multi-step, multi-agent orchestration end to end across Codex
+and Claude. The pr-tools branch/PR steps stay dry by design (not run against a
+real remote).
+
+One finding from the run: Codex registered its surface in
+`codex-hook-sessions.json` later than the default 30s `ORCA_WATCH_RESOLVE_SECS`
+window (fresh repo + mode cycle + brief submission pushed first-event time out),
+so the first `orca-watch` exited 2 on resolve. Re-running with the same `--after`
+resolved immediately and replayed the buffered Stop — confirming the "resolving
+late is safe" design. Mitigation: raise `ORCA_WATCH_RESOLVE_SECS` for Codex steps
+spawning into cold repos (the review step used 90s).
+
 Not yet exercised live: the `attention` classification (`Notification` /
 `PermissionRequest` / `AskUserQuestion`), covered when a worker actually pauses
 for input. The screen-read fallback for agents without hook integration is also

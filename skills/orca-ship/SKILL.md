@@ -58,6 +58,7 @@ Every step is the same fire-and-follow shape, composed from the primitives:
    - `event: turn_end` — the step finished. Read its handoff file and continue.
    - `event: attention` — the worker is waiting on a permission, question, or notification. Flip the human to that tab, or use `orca-msg` to answer or nudge, then watch again.
    - `event: timeout` — the step is taking longer than expected. Tell the human and decide whether to keep waiting (watch again) or intervene.
+   - For **codex** steps spawning into a cold repo, the worker can register its surface later than the default 30s resolve window (mode cycle + trust prompt + brief submission delay first-event time). Set `ORCA_WATCH_RESOLVE_SECS=90` for those follows. If watch still exits 2 on resolve, the Stop may already be buffered — re-run watch with the **same `--after`** and it replays the missed `turn_end` rather than losing it.
 4. **Read the handoff.** Pull the step's result from `handoff_dir` and use it to build the next brief.
 
 Each step gets a fresh worker. Context flows through handoff files and the branch, not through worker memory. Use `orca-msg` only to unstick a worker that paused, not to hand it the next step.
