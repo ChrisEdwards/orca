@@ -72,7 +72,7 @@ Narrate the workflow as it runs: which step is executing, the worker surface, an
 
 ## Cleanup
 
-When the workflow finishes or the human stops it, close the worker tabs you opened (`orca-cmux.sh close --surface <uuid>` from the `orca-spawn` skill), unless the human wants to inspect a worker. Leave a worker tab open if its step failed or paused, so the human can see what happened. The handoff dir under `${TMPDIR}` is disposable and may be left for inspection.
+When the workflow finishes or the human stops it, close the worker tabs you opened with `cmux close-surface --surface <uuid>` (the same cmux seam the spawn primitives use), unless the human wants to inspect a worker. Leave a worker tab open if its step failed or paused, so the human can see what happened. The handoff dir under `${TMPDIR}` is disposable and may be left for inspection.
 
 ## Boundaries
 

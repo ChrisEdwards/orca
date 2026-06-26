@@ -11,6 +11,7 @@ REPO_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
 SPAWN_SKILL_DIR="$REPO_ROOT/skills/orca-spawn"
 FORK_SKILL_DIR="$REPO_ROOT/skills/orca-fork"
 MSG_SKILL_DIR="$REPO_ROOT/skills/orca-msg"
+WORKFLOW_SKILL_DIR="$REPO_ROOT/skills/orca-workflow"
 CODEX_SPAWN_SKILL_LINK="$REPO_ROOT/.agents/skills/orca-spawn"
 CODEX_FORK_SKILL_LINK="$REPO_ROOT/.agents/skills/orca-fork"
 CODEX_MSG_SKILL_LINK="$REPO_ROOT/.agents/skills/orca-msg"
@@ -28,6 +29,7 @@ ok() { local desc=$1; shift; if "$@"; then pass; else fail "$desc"; fi; }
 eq() { [[ "$1" == "$2" ]]; }
 json_get() { jq -er "$2" "$1"; }
 valid_json() { jq -e . "$1" >/dev/null; }
+does_not_contain() { ! grep -qF "$1" "$2"; }
 
 for script in orca-adapter.sh orca-cmux.sh orca-spawn.sh orca-trust-prompt.sh orca-upgrade-prompt.sh orca-launch.sh; do
   path="$SPAWN_SKILL_DIR/scripts/$script"
@@ -60,6 +62,8 @@ ok "orca-spawn instructions prefer final response for worker findings" grep -qF 
 ok "orca-spawn instructions route durable artifacts to tmp" grep -qF 'If a durable handoff or artifact is genuinely useful, put it outside the repo under `${TMPDIR:-/tmp}/orca/<task-id>/`, and report the absolute path back to the human.' "$SPAWN_SKILL_DIR/SKILL.md"
 ok "orca-fork instructions point at bundled fork script" grep -qF "scripts/orca-fork.sh" "$FORK_SKILL_DIR/SKILL.md"
 ok "orca-msg instructions point at bundled message script" grep -qF "scripts/orca-msg.sh" "$MSG_SKILL_DIR/SKILL.md"
+ok "orca-workflow SKILL.md avoids sibling skill script paths" does_not_contain "orca-cmux.sh" "$WORKFLOW_SKILL_DIR/SKILL.md"
+ok "orca-workflow SKILL.md avoids sibling skill phrasing" does_not_contain "from the orca-spawn skill" "$WORKFLOW_SKILL_DIR/SKILL.md"
 ok "Codex orca-spawn project skill entry exists" test -L "$CODEX_SPAWN_SKILL_LINK"
 ok "Codex orca-spawn project skill entry points at canonical skill" eq "$(readlink "$CODEX_SPAWN_SKILL_LINK")" "../../skills/orca-spawn"
 ok "Codex orca-spawn project skill resolves to SKILL.md" test -f "$CODEX_SPAWN_SKILL_LINK/SKILL.md"
