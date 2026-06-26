@@ -7,14 +7,14 @@ packaging metadata, documentation, generated manifests, external CLI smoke
 checks, or behavior that is hard to observe deterministically, prefer direct
 validation commands and clear manual smoke-test notes over overbuilt test code.
 
+All code changes should have a bead tracking it. Create one if you are making changes and don't have one.
+
 When implementing a bead:
 
 1. Before starting implementation, claim the bead which will set it to in-progress.
 2. Implement the bead, using TDD only where it fits the change.
-3. Commit and push
+3. Commit (using conventional commits and including the bead id) and push
 4. Close the bead with a comment stating what you did and the commit hash(es)
-
-Use conventional commits
 
 ## Reflection
 
