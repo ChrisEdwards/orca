@@ -8,6 +8,7 @@
 orca_screen_has_trust_prompt() {
   local screen=$1
   (grep -qF -- "Is this a project you trust?" <<<"$screen" \
+    || grep -qF -- "Is this a project you created or one you trust?" <<<"$screen" \
     || grep -qF -- "Do you trust the contents of this directory?" <<<"$screen") \
     && grep -qiE -- '1[.)]?[[:space:]]+Yes' <<<"$screen"
 }
