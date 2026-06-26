@@ -43,6 +43,8 @@ ORCA_ADAPTER="$BIN_DIR/orca-adapter.sh"
 
 # shellcheck source=skills/orca-spawn/scripts/orca-trust-prompt.sh
 . "$BIN_DIR/orca-trust-prompt.sh"
+# shellcheck source=skills/orca-spawn/scripts/orca-upgrade-prompt.sh
+. "$BIN_DIR/orca-upgrade-prompt.sh"
 
 export CMUX_BIN=${CMUX_BIN:-cmux}
 
@@ -320,6 +322,18 @@ for ((p = 0; p < ORCA_READY_POLLS; p++)); do
       2) spawn_fail "failed to answer the trust prompt" ;;
       3) spawn_fail "failed to submit the trust prompt answer" ;;
       *) spawn_fail "failed to handle the trust prompt" ;;
+    esac
+  fi
+  if orca_maybe_dismiss_upgrade_prompt "$screen" "$SURFACE"; then
+    sleep "$ORCA_POLL_INTERVAL"
+    continue
+  else
+    upgrade_rc=$?
+    case "$upgrade_rc" in
+      1) ;;
+      2) spawn_fail "failed to answer the upgrade prompt" ;;
+      3) spawn_fail "failed to submit the upgrade prompt answer" ;;
+      *) spawn_fail "failed to handle the upgrade prompt" ;;
     esac
   fi
   if is_ready "$screen"; then ready=1; break; fi

@@ -42,6 +42,8 @@ keyfile="$FAKE_STATE/keycount"
 launched="$FAKE_STATE/launched"
 trust_selected="$FAKE_STATE/trust-selected"
 trusted="$FAKE_STATE/trusted"
+upgrade_selected="$FAKE_STATE/upgrade-selected"
+upgrade_dismissed="$FAKE_STATE/upgrade-dismissed"
 kc=0; [[ -f "$keyfile" ]] && kc=$(cat "$keyfile")
 
 case "$sub" in
@@ -87,6 +89,7 @@ case "$sub" in
   send)
     payload=""; for a in "$@"; do payload=$a; done
     [[ "$payload" == "1" ]] && : > "$trust_selected"
+    [[ "$payload" == "2" ]] && : > "$upgrade_selected"
     : > "$launched"
     echo "OK surface:43 workspace:9"
     ;;
@@ -94,6 +97,7 @@ case "$sub" in
     key=""; for a in "$@"; do key=$a; done
     [[ "$key" == "shift+tab" ]] && printf '%s' "$((kc + 1))" > "$keyfile"
     [[ "$key" == "enter" && -f "$trust_selected" ]] && : > "$trusted"
+    [[ "$key" == "enter" && -f "$upgrade_selected" ]] && : > "$upgrade_dismissed"
     echo "OK surface:43 workspace:9"
     ;;
   read-screen)
@@ -137,6 +141,18 @@ case "$sub" in
           printf '  Do you trust the contents of this directory?\n'
           printf '› 1. Yes, continue\n'
           printf '  2. No, quit\n'
+          exit 0
+        fi
+        printf '› Implement {feature}\n'
+        printf 'gpt-5.5 high · %s\n' "$FAKE_CWD"
+        ;;
+      codex-upgrade)
+        [[ -f "$launched" ]] || { echo "booting codex"; exit 0; }
+        if [[ ! -f "$upgrade_dismissed" ]]; then
+          printf '  ✨ Update available! 0.142.0 -> 0.142.2\n'
+          printf '› 1. Update now\n'
+          printf '  2. Skip\n'
+          printf '  3. Skip until next version\n'
           exit 0
         fi
         printf '› Implement {feature}\n'
@@ -308,6 +324,19 @@ ok  "codex trust: submitted answer"       eq "$(count_enter_keys)" 3
 ok  "codex trust: no mode step"           eq "$(count_shift_tabs)" 0
 ok  "codex trust: delivers pointer brief" \
       calls_have "$(with_parent_footer "Read .orca/briefs/trust-codex-repo.md and carry out the task it describes.")"
+
+# === Codex upgrade prompt is dismissed before readiness ====================
+WORK_CODEX_UPGRADE="$TMP/repo-codex-upgrade"; mkdir -p "$WORK_CODEX_UPGRADE"
+DEFAULT_CWD="$WORK_CODEX_UPGRADE"; SCENARIO=codex-upgrade
+spawn --agent codex --task "Upgrade test task" --brief "Proceed after upgrade."
+
+ok  "codex upgrade: exits 0"                rc_is 0
+ok  "codex upgrade: status=ok"              eq "$(field status)" ok
+ok  "codex upgrade: sent skip (2)"          calls_have_line $'send\t--surface\t'"$SURFACE"$'\t2'
+ok  "codex upgrade: submitted answer"       eq "$(count_enter_keys)" 3
+ok  "codex upgrade: no mode step"           eq "$(count_shift_tabs)" 0
+ok  "codex upgrade: delivers pointer brief" \
+      calls_have "$(with_parent_footer "Read .orca/briefs/upgrade-test-task.md and carry out the task it describes.")"
 
 # === gitignore is not duplicated when already present ======================
 WORK3="$TMP/repo-gi"; mkdir -p "$WORK3"
