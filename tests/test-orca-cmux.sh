@@ -190,6 +190,11 @@ orca close --surface "$SFC" >/dev/null
 assert_args "close emits close-surface command" \
   close-surface --surface "$SFC"
 
+# close-workspace maps to close-workspace, addressed by UUID.
+orca close-workspace --workspace "$WS" >/dev/null
+assert_args "close-workspace emits close-workspace command" \
+  close-workspace --workspace "$WS"
+
 # list maps to list-pane-surfaces with both id forms (for debugging).
 orca list >/dev/null
 assert_args "list emits list-pane-surfaces command" \
@@ -226,6 +231,13 @@ else
   pass
 fi
 assert_no_cmux_call "close rejects index before touching cmux"
+
+if orca close-workspace --workspace workspace:9 2>/dev/null; then
+  fail "close-workspace must reject a workspace ref"
+else
+  pass
+fi
+assert_no_cmux_call "close-workspace rejects workspace ref before touching cmux"
 
 if orca create-tab --workspace workspace:9 2>/dev/null; then
   fail "create-tab must reject a workspace ref"
