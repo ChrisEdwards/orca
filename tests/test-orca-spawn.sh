@@ -114,7 +114,9 @@ case "$sub" in
   send)
     payload=""; for a in "$@"; do payload=$a; done
     [[ "$payload" == "1" ]] && : > "$trust_selected"
-    [[ "$payload" == "2" ]] && : > "$upgrade_selected"
+    expected_upgrade=2
+    [[ "${FAKE_SCENARIO:-}" == codex-upgrade-skip-3 ]] && expected_upgrade=3
+    [[ "$payload" == "$expected_upgrade" ]] && : > "$upgrade_selected"
     : > "$launched"
     echo "OK surface:43 workspace:9"
     ;;
@@ -178,6 +180,18 @@ case "$sub" in
           printf '› 1. Update now\n'
           printf '  2. Skip\n'
           printf '  3. Skip until next version\n'
+          exit 0
+        fi
+        printf '› Implement {feature}\n'
+        printf 'gpt-5.5 high · %s\n' "$FAKE_CWD"
+        ;;
+      codex-upgrade-skip-3)
+        [[ -f "$launched" ]] || { echo "booting codex"; exit 0; }
+        if [[ ! -f "$upgrade_dismissed" ]]; then
+          printf '  ✨ Update available! 0.142.0 -> 0.142.2\n'
+          printf '  1. Update now\n'
+          printf '  2. Skip until next version\n'
+          printf '  3. Skip\n'
           exit 0
         fi
         printf '› Implement {feature}\n'
@@ -404,6 +418,20 @@ ok  "codex upgrade: submitted answer"       eq "$(count_enter_keys)" 3
 ok  "codex upgrade: no mode step"           eq "$(count_shift_tabs)" 0
 ok  "codex upgrade: delivers pointer brief" \
       calls_have "$(with_parent_footer "Read .orca/briefs/upgrade-test-task.md and carry out the task it describes.")"
+
+# === Codex upgrade prompt sends option 3 when plain Skip is third ==========
+WORK_CODEX_UPGRADE_3="$TMP/repo-codex-upgrade-3"; mkdir -p "$WORK_CODEX_UPGRADE_3"
+DEFAULT_CWD="$WORK_CODEX_UPGRADE_3"; SCENARIO=codex-upgrade-skip-3
+spawn --agent codex --task "Upgrade skip three" --brief "Proceed after upgrade."
+
+ok  "codex upgrade 3: exits 0"                rc_is 0
+ok  "codex upgrade 3: status=ok"              eq "$(field status)" ok
+ok  "codex upgrade 3: sent skip (3)"          calls_have_line $'send\t--surface\t'"$SURFACE"$'\t3'
+no  "codex upgrade 3: did not send skip (2)"  calls_have_line $'send\t--surface\t'"$SURFACE"$'\t2'
+ok  "codex upgrade 3: submitted answer"       eq "$(count_enter_keys)" 3
+ok  "codex upgrade 3: no mode step"           eq "$(count_shift_tabs)" 0
+ok  "codex upgrade 3: delivers pointer brief" \
+      calls_have "$(with_parent_footer "Read .orca/briefs/upgrade-skip-three.md and carry out the task it describes.")"
 
 # === gitignore is not duplicated when already present ======================
 WORK3="$TMP/repo-gi"; mkdir -p "$WORK3"
