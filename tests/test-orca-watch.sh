@@ -3,8 +3,7 @@
 #
 # orca-watch resolves a surface to a cmux hook session, then subscribes to cmux
 # lifecycle events. This test injects cmux through CMUX_BIN and keeps "cmux" off
-# PATH so the event subscriber must honor the injected binary to see the Stop
-# frame.
+# PATH so the event subscriber must honor the injected binary to see hook frames.
 #
 # No external test deps beyond jq and python3 (which orca-watch itself needs).
 # Run: tests/test-orca-watch.sh
@@ -24,8 +23,9 @@ HOME_DIR="$TMP/home"
 PATH_DIR="$TMP/path"
 
 SURFACE="BE7E2B29-66BA-44B4-BE66-73B85C85C7F3"
-SESSION="session-123"
-TARGET="claude-$SESSION"
+SURFACE_LOWER="be7e2b29-66ba-44b4-be66-73b85c85c7f3"
+CLAUDE_SESSION="session-123"
+CODEX_SESSION="codex-session-777"
 
 mkdir -p "$FAKE_DIR" "$HOME_DIR/.cmuxterm" "$PATH_DIR"
 
@@ -35,16 +35,6 @@ BASH_BIN=$(command -v bash)
 ln -s "$PYTHON3" "$PATH_DIR/python3"
 ln -s "$DATE_BIN" "$PATH_DIR/date"
 ln -s "$BASH_BIN" "$PATH_DIR/bash"
-
-cat > "$HOME_DIR/.cmuxterm/claude-hook-sessions.json" <<EOF
-{
-  "activeSessionsBySurface": {
-    "$SURFACE": {
-      "sessionId": "$SESSION"
-    }
-  }
-}
-EOF
 
 cat > "$FAKE" <<'EOF'
 #!/bin/bash
@@ -57,9 +47,46 @@ sub=${1:-}; shift || true
 
 case "$sub" in
   events)
-    printf '{"type":"ack","resume":{"latest_seq":40}}\n'
-    printf '{"type":"event","name":"agent.hook.Stop","payload":{"session_id":"claude-other"},"seq":41}\n'
-    printf '{"type":"event","name":"agent.hook.Stop","payload":{"session_id":"%s","cwd":"/tmp/project","workspace_id":"workspace-123"},"seq":42}\n' "$FAKE_TARGET"
+    case "${FAKE_MODE:-stop}" in
+      stop)
+        printf '{"type":"ack","resume":{"latest_seq":40}}\n'
+        printf '{"type":"event","name":"agent.hook.Stop","payload":{"session_id":"claude-other"},"seq":41}\n'
+        printf '{"type":"event","name":"agent.hook.Stop","payload":{"session_id":"%s","cwd":"/tmp/project","workspace_id":"workspace-123"},"seq":42}\n' "$FAKE_TARGET"
+        ;;
+      notification)
+        printf '{"type":"event","name":"agent.hook.Notification","payload":{"session_id":"%s","cwd":"/tmp/project","workspace_id":"workspace-123"},"seq":50}\n' "$FAKE_TARGET"
+        ;;
+      permission)
+        printf '{"type":"event","name":"agent.hook.PermissionRequest","payload":{"session_id":"%s","cwd":"/tmp/project","workspace_id":"workspace-123"},"seq":51}\n' "$FAKE_TARGET"
+        ;;
+      question)
+        printf '{"type":"event","name":"agent.hook.AskUserQuestion","payload":{"session_id":"%s","cwd":"/tmp/project","workspace_id":"workspace-123"},"seq":52}\n' "$FAKE_TARGET"
+        ;;
+      timeout)
+        printf '{"type":"event","name":"agent.hook.Stop","payload":{"session_id":"claude-other"},"seq":60}\n'
+        exec python3 - <<'PY'
+import time
+time.sleep(5)
+PY
+        ;;
+      stream_closed)
+        printf '{"type":"ack","resume":{"latest_seq":70}}\n'
+        printf '{"type":"event","name":"agent.hook.Stop","payload":{"session_id":"claude-other"},"seq":71}\n'
+        ;;
+      noisy)
+        printf '{"type":"ack","resume":{"latest_seq":80}}\n'
+        printf '\n'
+        printf 'not-json\n'
+        printf '{"type":"heartbeat","seq":81}\n'
+        printf '{"type":"event","name":"system.notice","payload":{"session_id":"%s"},"seq":82}\n' "$FAKE_TARGET"
+        printf '{"type":"event","name":"agent.hook.Stop","payload":{"session_id":"claude-other"},"seq":83}\n'
+        printf '{"type":"event","name":"agent.hook.Stop","payload":{"session_id":"%s","cwd":"/tmp/noisy","workspace_id":"workspace-noisy"},"seq":84}\n' "$FAKE_TARGET"
+        ;;
+      *)
+        echo "unexpected FAKE_MODE: $FAKE_MODE" >&2
+        exit 8
+        ;;
+    esac
     ;;
   *)
     echo "unexpected fake cmux subcommand: $sub" >&2
@@ -89,6 +116,24 @@ assert_eq() {
   fi
 }
 
+assert_contains() {
+  local desc="$1" needle="$2" haystack="$3"
+  if grep -qF -- "$needle" <<<"$haystack"; then
+    pass
+  else
+    fail "$desc" "missing: [$needle]" "in:      [$haystack]"
+  fi
+}
+
+assert_not_contains() {
+  local desc="$1" needle="$2" haystack="$3"
+  if grep -qF -- "$needle" <<<"$haystack"; then
+    fail "$desc" "unexpected: [$needle]" "in:          [$haystack]"
+  else
+    pass
+  fi
+}
+
 assert_jq() {
   local desc="$1" expr="$2" json="$3"
   if jq -e "$expr" >/dev/null <<<"$json"; then
@@ -98,28 +143,142 @@ assert_jq() {
   fi
 }
 
+reset_store() {
+  rm -rf "$HOME_DIR/.cmuxterm"
+  mkdir -p "$HOME_DIR/.cmuxterm"
+}
+
+write_claude_store() {
+  local surface="$1" session="$2"
+  reset_store
+  cat > "$HOME_DIR/.cmuxterm/claude-hook-sessions.json" <<EOF
+{
+  "activeSessionsBySurface": {
+    "$surface": {
+      "sessionId": "$session"
+    }
+  }
+}
+EOF
+}
+
+write_codex_store() {
+  local surface="$1" session="$2"
+  reset_store
+  cat > "$HOME_DIR/.cmuxterm/codex-hook-sessions.json" <<EOF
+{
+  "sessions": {
+    "$session": {
+      "surfaceId": "$surface",
+      "sessionId": "$session"
+    }
+  }
+}
+EOF
+}
+
 OUT=""
 ERR=""
 RC=0
+MODE="stop"
+TARGET=""
+RESOLVE_SECS=""
 run_watch() {
+  local agent="$1" surface="$2" timeout="$3" after="${4:-}"
   local errfile="$TMP/stderr"
+  local args=(--surface "$surface" --agent "$agent" --timeout "$timeout")
+  if [[ -n "$after" ]]; then
+    args+=(--after "$after")
+  fi
+
   : > "$CALLS"
   OUT=$(HOME="$HOME_DIR" PATH="$PATH_DIR" CMUX_BIN="$FAKE" \
-    FAKE_CALLS="$CALLS" FAKE_TARGET="$TARGET" \
-    "$WATCH" --surface "$SURFACE" --agent claude --after 40 --timeout 5 2>"$errfile")
+    FAKE_CALLS="$CALLS" FAKE_TARGET="$TARGET" FAKE_MODE="$MODE" \
+    ORCA_WATCH_RESOLVE_SECS="$RESOLVE_SECS" \
+    "$WATCH" "${args[@]}" 2>"$errfile")
   RC=$?
   ERR=$(cat "$errfile")
 }
 
-run_watch
+write_claude_store "$SURFACE" "$CLAUDE_SESSION"
+TARGET="claude-$CLAUDE_SESSION"
+MODE="stop"
+RESOLVE_SECS=""
+run_watch claude "$SURFACE" 5 40
 
-assert_eq "watch exits successfully after matching Stop event" "0" "$RC"
-assert_jq "watch reports a turn_end for the resolved session" \
+assert_eq "watch exits successfully after matching Claude Stop event" "0" "$RC"
+assert_jq "Claude Stop reports turn_end for the resolved session" \
   '.event == "turn_end" and .hook == "Stop" and .agent == "claude" and .surface == "'"$SURFACE"'" and .session_id == "'"$TARGET"'" and .cwd == "/tmp/project" and .workspace_id == "workspace-123" and .seq == 42' \
   "$OUT"
-assert_eq "event stream is opened through the CMUX_BIN fake" \
+assert_jq "unrelated session frame before the match is skipped" \
+  '.session_id == "'"$TARGET"'" and .seq == 42' \
+  "$OUT"
+assert_eq "event stream is opened through the CMUX_BIN fake with --after" \
   "$(printf '%s\n' "events	--no-heartbeat	--name	agent.hook.Stop	--name	agent.hook.Notification	--name	agent.hook.PermissionRequest	--name	agent.hook.AskUserQuestion	--after	40")" \
   "$(cat "$CALLS")"
+
+write_codex_store "$SURFACE" "$CODEX_SESSION"
+TARGET="codex-$CODEX_SESSION"
+MODE="stop"
+run_watch codex "$SURFACE_LOWER" 5
+
+assert_eq "watch exits successfully after matching Codex Stop event" "0" "$RC"
+assert_jq "Codex store resolves by case-insensitive surface reverse scan" \
+  '.event == "turn_end" and .hook == "Stop" and .agent == "codex" and .surface == "'"$SURFACE_LOWER"'" and .session_id == "'"$TARGET"'" and .seq == 42' \
+  "$OUT"
+assert_not_contains "--after is omitted from cmux argv when not requested" "--after" "$(cat "$CALLS")"
+
+write_claude_store "$SURFACE" "$CLAUDE_SESSION"
+TARGET="claude-$CLAUDE_SESSION"
+for spec in \
+  "notification Notification 50" \
+  "permission PermissionRequest 51" \
+  "question AskUserQuestion 52"
+do
+  set -- $spec
+  MODE="$1"
+  hook="$2"
+  seq="$3"
+  run_watch claude "$SURFACE" 5
+  assert_eq "watch exits successfully for $hook attention" "0" "$RC"
+  assert_jq "$hook reports attention for the resolved session" \
+    '.event == "attention" and .hook == "'"$hook"'" and .agent == "claude" and .surface == "'"$SURFACE"'" and .session_id == "'"$TARGET"'" and .seq == '"$seq" \
+    "$OUT"
+done
+
+MODE="timeout"
+run_watch claude "$SURFACE" 1
+assert_eq "timeout exits with code 3 when no relevant frame arrives" "3" "$RC"
+assert_jq "timeout reports timeout JSON" \
+  '.event == "timeout" and .agent == "claude" and .surface == "'"$SURFACE"'"' \
+  "$OUT"
+
+MODE="stream_closed"
+run_watch claude "$SURFACE" 5
+assert_eq "stream closed exits with code 4 before a match" "4" "$RC"
+assert_jq "stream closed reports stream_closed JSON" \
+  '.event == "stream_closed" and .agent == "claude" and .surface == "'"$SURFACE"'"' \
+  "$OUT"
+
+MODE="noisy"
+run_watch claude "$SURFACE" 5
+assert_eq "noisy stream still exits successfully after matching Stop" "0" "$RC"
+assert_jq "non-event, malformed, blank, and unrelated frames are ignored" \
+  '.event == "turn_end" and .hook == "Stop" and .agent == "claude" and .surface == "'"$SURFACE"'" and .session_id == "'"$TARGET"'" and .cwd == "/tmp/noisy" and .workspace_id == "workspace-noisy" and .seq == 84' \
+  "$OUT"
+
+reset_store
+MODE="stop"
+run_watch claude "$SURFACE" 5
+assert_eq "missing store exits with code 2" "2" "$RC"
+assert_contains "missing store reports a clear resolve error" "no session store for claude" "$ERR"
+
+reset_store
+printf '{not-json\n' > "$HOME_DIR/.cmuxterm/claude-hook-sessions.json"
+RESOLVE_SECS="0"
+run_watch claude "$SURFACE" 5
+assert_eq "malformed store exits with code 2" "2" "$RC"
+assert_contains "malformed store reports unresolved surface" "could not resolve a session for surface $SURFACE" "$ERR"
 
 if ((FAIL > 0)); then
   printf '\n%d passed, %d failed\n' "$PASS" "$FAIL" >&2
