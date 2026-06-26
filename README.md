@@ -44,6 +44,18 @@ packages every skill under `skills/`.
 Each skill must remain self-contained. Runtime files used by a skill belong
 inside that skill directory, such as `skills/orca-spawn/scripts/`.
 
+## Development Setup
+
+After cloning, install the git hooks:
+
+```bash
+./scripts/install-hooks.sh
+```
+
+This symlinks `hooks/pre-push` into `.git/hooks/`. The hook warns you to bump
+the plugin version in `.claude-plugin/plugin.json` and `.codex-plugin/plugin.json`
+when skill files change.
+
 ## Validate Packaging
 
 Run the package checks:

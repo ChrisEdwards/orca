@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# Reminds you to bump plugin versions when skill files change.
+# Warns only — never blocks.
+
+set -euo pipefail
+
+changed=""
+
+while IFS=' ' read -r _local_ref local_sha _remote_ref remote_sha; do
+  if [ "$local_sha" = "0000000000000000000000000000000000000000" ]; then
+    continue
+  fi
+
+  if [ "$remote_sha" = "0000000000000000000000000000000000000000" ]; then
+    base=$(git merge-base "$local_sha" origin/HEAD 2>/dev/null || true)
+    if [ -n "$base" ]; then
+      range="${base}..${local_sha}"
+    else
+      range="$(git hash-object -t tree /dev/null)..${local_sha}"
+    fi
+  else
+    range="${remote_sha}..${local_sha}"
+  fi
+
+  files=$(git diff --name-only "$range" -- 'skills/' 2>/dev/null || true)
+  if [ -n "$files" ]; then
+    changed="${changed}${files}"$'\n'
+  fi
+done
+
+if [ -z "$changed" ]; then
+  exit 0
+fi
+
+unique=$(printf '%s' "$changed" | sort -u | grep -v '^$' || true)
+if [ -z "$unique" ]; then
+  exit 0
+fi
+
+version="unknown"
+if [ -f ".claude-plugin/plugin.json" ]; then
+  version=$(grep '"version"' .claude-plugin/plugin.json | grep -o '"[0-9][^"]*"' | tr -d '"' || echo "unknown")
+fi
+
+echo "" >&2
+echo "  pre-push: skill files changed — consider a version bump" >&2
+echo "  current version: $version" >&2
+echo "" >&2
+echo "  changed:" >&2
+printf '%s\n' "$unique" | while IFS= read -r f; do
+  echo "    $f" >&2
+done
+echo "" >&2
+echo "  update .claude-plugin/plugin.json and .codex-plugin/plugin.json" >&2
+echo "" >&2
+
+exit 0
