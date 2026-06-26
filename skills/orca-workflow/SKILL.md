@@ -72,7 +72,14 @@ Narrate the workflow as it runs: which step is executing, the worker surface, an
 
 ## Cleanup
 
-When the workflow finishes or the human stops it, close the worker tabs you opened with `cmux close-surface --surface <uuid>` (the same cmux seam the spawn primitives use), unless the human wants to inspect a worker. Leave a worker tab open if its step failed or paused, so the human can see what happened. The handoff dir under `${TMPDIR}` is disposable and may be left for inspection.
+Track each worker's reported `surface`, `workspace`, and `workspace_created` values from spawn output. When the workflow finishes or the human stops it, apply cleanup per worker:
+
+- If `workspace_created=true`, the workspace was created just for this workflow and still contains the unused bootstrap terminal plus the worker surface. Close the whole workspace with `cmux close-workspace --workspace <workspace-uuid>` so both surfaces are removed together.
+- If `workspace_created=false`, including the calling workspace, the workspace existed before this workflow. Close only worker surfaces you opened with `cmux close-surface --surface <surface-uuid>`. Never close a pre-existing workspace; it may hold the human's own tabs.
+
+If several workers share one orca-created workspace, only the first reports `workspace_created=true` and the rest report `false`; closing that one workspace also disposes of every sibling worker surface it holds, so a single `close-workspace` is enough and the order does not matter.
+
+Leave a worker tab or workspace open if its step failed or paused, so the human can inspect it. Never close the controller/orchestrator surface. The handoff dir under `${TMPDIR}` is disposable and may be left for inspection.
 
 ## Boundaries
 

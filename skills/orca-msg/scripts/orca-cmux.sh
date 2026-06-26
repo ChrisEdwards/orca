@@ -20,6 +20,7 @@
 #   send-key    --surface <uuid> <key>        send a key (enter, "shift+tab", ...)
 #   read-screen --surface <uuid> [--lines N]  read N lines (default 40)
 #   close       --surface <uuid>              close the surface
+#   close-workspace --workspace <uuid>        close the workspace and all its surfaces
 #   list                                      list surfaces (for debugging)
 #   identify-json                            print caller identity as JSON
 #   list-workspaces-json                      list workspaces in caller window as JSON
@@ -122,7 +123,7 @@ create_workspace() {
 }
 
 cmd=${1:-}
-[[ -n "$cmd" ]] || die "usage: orca-cmux <create-tab|create-workspace|send|send-key|read-screen|close|list|identify-json|list-workspaces-json|list-surfaces-json> [options]"
+[[ -n "$cmd" ]] || die "usage: orca-cmux <create-tab|create-workspace|send|send-key|read-screen|close|close-workspace|list|identify-json|list-workspaces-json|list-surfaces-json> [options]"
 shift
 
 case "$cmd" in
@@ -202,6 +203,18 @@ case "$cmd" in
     done
     require_uuid surface "$sfc"
     cmux_exec close-surface --surface "$sfc"
+    ;;
+
+  close-workspace)
+    ws=""
+    while (($#)); do
+      case "$1" in
+        --workspace) need_value close-workspace --workspace $#; ws=$2; shift 2 ;;
+        *) die "close-workspace: unexpected argument: $1" ;;
+      esac
+    done
+    require_uuid workspace "$ws"
+    cmux_exec close-workspace --workspace "$ws"
     ;;
 
   list)
