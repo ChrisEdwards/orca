@@ -94,19 +94,21 @@ target="${agent}-${session}"
 # session. Python owns the cmux subprocess so timeout and teardown are clean and
 # a SIGPIPE on the producer can never mask a successful match.
 ORCA_TARGET="$target" ORCA_SURFACE="$surface" ORCA_AGENT="$agent" \
+ORCA_CMUX_BIN="${CMUX_BIN:-cmux}" \
 ORCA_AFTER="$after" ORCA_TIMEOUT="$timeout" python3 <<'PY'
 import json, os, select, subprocess, sys, time
 
 target  = os.environ["ORCA_TARGET"]
 surface = os.environ["ORCA_SURFACE"]
 agent   = os.environ["ORCA_AGENT"]
+cmux_bin = os.environ.get("ORCA_CMUX_BIN") or "cmux"
 after   = os.environ.get("ORCA_AFTER") or ""
 timeout = int(os.environ.get("ORCA_TIMEOUT") or "0")
 
 TURN_END  = {"Stop"}
 ATTENTION = {"Notification", "PermissionRequest", "AskUserQuestion"}
 
-cmd = ["cmux", "events", "--no-heartbeat",
+cmd = [cmux_bin, "events", "--no-heartbeat",
        "--name", "agent.hook.Stop",
        "--name", "agent.hook.Notification",
        "--name", "agent.hook.PermissionRequest",
