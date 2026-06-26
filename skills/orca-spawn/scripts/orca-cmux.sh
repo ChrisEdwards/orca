@@ -48,14 +48,6 @@ require_uuid() {
 # need_value <command> <flag> <remaining-arg-count>
 need_value() { (($3 >= 2)) || die "$1: $2 needs a value"; }
 
-normalize_send_payload() {
-  local payload=$1
-  while [[ "$payload" == *$'\n\n'* ]]; do
-    payload=${payload//$'\n\n'/$'\n'}
-  done
-  printf '%s' "$payload"
-}
-
 parse_first_uuid() {
   local out=$1 uuid
   uuid=$(printf '%s\n' "$out" \
@@ -158,11 +150,10 @@ case "$cmd" in
   send|send-key)
     sfc=""; payload=""; have_payload=0; rest=0
     while (($#)); do
-      if ((rest == 0)); then
+      if ((have_payload == 0 && rest == 0)); then
         case "$1" in
           --surface) need_value "$cmd" --surface $#; sfc=$2; shift 2; continue ;;
           --) rest=1; shift; continue ;;
-          -*) die "$cmd: unexpected option: $1" ;;
         esac
       fi
       ((have_payload == 0)) || die "$cmd: too many arguments: $1"
@@ -174,7 +165,6 @@ case "$cmd" in
       [[ "$cmd" == send ]] && die "send: text argument is required"
       die "send-key: key argument is required"
     fi
-    [[ "$cmd" == send ]] && payload=$(normalize_send_payload "$payload")
     cmux_exec "$cmd" --surface "$sfc" "$payload"
     ;;
 
