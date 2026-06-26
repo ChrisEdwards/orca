@@ -48,10 +48,17 @@ done
 store="$HOME/.cmuxterm/${agent}-hook-sessions.json"
 [[ -f "$store" ]] || die "no session store for $agent at $store (is the cmux $agent hook integration installed?)"
 
-# Resolve surface UUID -> sessionId via the store, retrying briefly because the
-# SessionStart hook may still be landing for a freshly spawned worker.
+# Resolve surface UUID -> sessionId via the store, retrying because the hook may
+# still be landing for a freshly spawned worker. Claude registers by ready-time,
+# but Codex can take many seconds longer to associate its surface, so the window
+# is generous (override with ORCA_WATCH_RESOLVE_SECS). Resolving late is safe:
+# the event subscription uses --after, so a Stop that fired during resolution is
+# replayed rather than lost.
+resolve_secs=${ORCA_WATCH_RESOLVE_SECS:-30}
+[[ "$resolve_secs" =~ ^[0-9]+$ ]] || die "ORCA_WATCH_RESOLVE_SECS must be a non-negative integer, got: $resolve_secs"
 session=""
-for _ in 1 2 3 4 5 6 7 8 9 10; do
+resolve_deadline=$(( $(date +%s) + resolve_secs ))
+while :; do
   session=$(python3 - "$store" "$surface" <<'PY'
 import json, sys
 store, surface = sys.argv[1], sys.argv[2]
@@ -76,9 +83,10 @@ for sid, rec in (data.get("sessions") or {}).items():
 PY
 )
   [[ -n "$session" ]] && break
-  sleep 0.3
+  (( $(date +%s) >= resolve_deadline )) && break
+  sleep 0.5
 done
-[[ -n "$session" ]] || die "could not resolve a session for surface $surface in $store (worker may not have started, or hooks are off)"
+[[ -n "$session" ]] || die "could not resolve a session for surface $surface in $store within ${resolve_secs}s (worker may not have started, or hooks are off)"
 
 target="${agent}-${session}"
 
