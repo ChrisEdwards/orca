@@ -22,7 +22,12 @@ Require these external CLIs on `PATH`:
 - **agent type** — `claude` or `codex`. Ask if the user did not say.
 - **task** — a short title (becomes the tab name and task id) plus the work to do.
 - **brief** — a self-contained description of the task. The worker starts fresh with no conversation history, so include what to do, any constraints, and how it will know it is done. Construct this from the user's request.
-- **cwd** — optional. Defaults to the calling workspace's directory. Pass `--cwd` only to override.
+- **cwd** — optional worker working directory. Defaults from the selected target workspace's directory. Pass `--cwd` only to override.
+- **target workspace** — optional. Use at most one:
+  - `--workspace-name <name>` selects an exact `custom_title` or `title` match in the caller's current cmux window, or creates a missing named workspace there.
+  - `--workspace-id <uuid>` selects an existing workspace by stable UUID in the caller's current cmux window. Never pass positional refs such as `workspace:3`.
+
+Workspace selection answers where the worker appears. `--cwd` answers where the worker process starts and where the brief is written; it may differ from target workspace metadata.
 
 ## Worker artifacts and handoffs
 
@@ -45,6 +50,20 @@ scripts/orca-spawn.sh --agent claude --task "Fix the login redirect" \
   --brief-file /tmp/brief.md --cwd ~/projects/app
 ```
 
+Target an existing or newly created workspace by exact name:
+
+```bash
+scripts/orca-spawn.sh --agent codex --task "Review PR 123" \
+  --brief-file /tmp/review.md --workspace-name aiml-services --cwd ~/projects/aiml-services
+```
+
+Target a known existing workspace by UUID:
+
+```bash
+scripts/orca-spawn.sh --agent codex --task "Run parser tests" \
+  --brief-file /tmp/brief.md --workspace-id 90D8E74A-E0EE-4FCB-8F7C-105574F46F01
+```
+
 Resolve `scripts/orca-spawn.sh` relative to this skill directory.
 
 ## Report back
@@ -52,10 +71,12 @@ Resolve `scripts/orca-spawn.sh` relative to this skill directory.
 `orca-spawn` prints `key=value` lines. On success (`status=ok`), tell the human:
 
 - the **task id**
+- the **target workspace UUID**
+- whether the workspace was created
 - the **worker surface UUID** — hold this in context; it is how you address the worker later
 - the **tab name**
 
-Example: "Spawned a Codex worker for `fix-login-redirect` in tab `fix-login-redirect` (surface `CEBB…`). It reached ready and has the brief."
+Example: "Spawned a Codex worker for `fix-login-redirect` in workspace `90D8…` in tab `fix-login-redirect` (surface `CEBB…`). It reached ready and has the brief."
 
 ## On failure
 
@@ -65,5 +86,7 @@ A non-zero exit prints `status=error` with an `error=` reason and, when the tab 
 
 - One task, one worker, no monitoring afterward. This is fire and confirm.
 - No worker registry or monitoring state is persisted. Brief files are written under `.orca/briefs/`, and `orca-spawn` ensures `.orca/` is gitignored.
-- The worker opens in the calling workspace, the one this session was fired from.
+- With no workspace selector, the worker opens in the calling workspace, the one this session was fired from.
+- `orca-spawn` owns only cmux workspace routing and worker launch mechanics. It may select or create a target workspace, but it does not parse PR URLs, discover repositories, clone repositories, fetch branches, create working directories, or construct review-specific briefs.
+- If the human asks raw `orca-spawn` to review a PR link without a concrete local `cwd` and workspace selector, gather those inputs or explain that PR URL resolution belongs in a higher-level review skill.
 - If Claude asks to trust the worker cwd before showing its input box, `orca-spawn` selects the Yes option and continues waiting for readiness.

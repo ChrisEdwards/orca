@@ -15,6 +15,7 @@
 #
 # Commands:
 #   create-tab  --workspace <uuid> [--cwd D]  create a terminal surface, print its UUID
+#   create-workspace --name <name> --cwd <dir> --window <uuid>  create a workspace, print its UUID
 #   send        --surface <uuid> <text>       send literal text (no trailing enter)
 #   send-key    --surface <uuid> <key>        send a key (enter, "shift+tab", ...)
 #   read-screen --surface <uuid> [--lines N]  read N lines (default 40)
@@ -55,6 +56,15 @@ normalize_send_payload() {
   printf '%s' "$payload"
 }
 
+parse_first_uuid() {
+  local out=$1 uuid
+  uuid=$(printf '%s\n' "$out" \
+    | grep -oE '\([0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\)' \
+    | head -1 | tr -d '()') || true
+  [[ -n "$uuid" ]] || return 1
+  printf '%s\n' "$uuid"
+}
+
 # create_tab <workspace-uuid> [cwd]
 # Creates a plain terminal surface in the given workspace and prints its stable
 # surface UUID. Uses --focus false so spawning never steals the human's focus.
@@ -66,15 +76,20 @@ create_tab() {
   out=$(cmux_exec "${args[@]}")
   # Output: "OK surface:N (UUID) pane:N (UUID) workspace:N (UUID)".
   # The first parenthesised value is the surface UUID, the only stable handle.
-  uuid=$(printf '%s\n' "$out" \
-    | grep -oE '\([0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\)' \
-    | head -1 | tr -d '()') || true
-  [[ -n "$uuid" ]] || die "could not parse a surface UUID from cmux output: $out"
+  uuid=$(parse_first_uuid "$out") || die "could not parse a surface UUID from cmux output: $out"
+  printf '%s\n' "$uuid"
+}
+
+create_workspace() {
+  local name=$1 cwd=$2 window=$3 out uuid
+  out=$(cmux_exec new-workspace --name "$name" --cwd "$cwd" --window "$window" --focus false --id-format both)
+  # Output starts with the created workspace, followed by its initial surface.
+  uuid=$(parse_first_uuid "$out") || die "could not parse a workspace UUID from cmux output: $out"
   printf '%s\n' "$uuid"
 }
 
 cmd=${1:-}
-[[ -n "$cmd" ]] || die "usage: orca-cmux <create-tab|send|send-key|read-screen|close|list|identify-json|list-workspaces-json|list-surfaces-json> [options]"
+[[ -n "$cmd" ]] || die "usage: orca-cmux <create-tab|create-workspace|send|send-key|read-screen|close|list|identify-json|list-workspaces-json|list-surfaces-json> [options]"
 shift
 
 case "$cmd" in
@@ -89,6 +104,22 @@ case "$cmd" in
     done
     require_uuid workspace "$ws"
     create_tab "$ws" "$cwd"
+    ;;
+
+  create-workspace)
+    name=""; cwd=""; window=""
+    while (($#)); do
+      case "$1" in
+        --name)   need_value create-workspace --name $#;   name=$2; shift 2 ;;
+        --cwd)    need_value create-workspace --cwd $#;    cwd=$2; shift 2 ;;
+        --window) need_value create-workspace --window $#; window=$2; shift 2 ;;
+        *) die "create-workspace: unexpected argument: $1" ;;
+      esac
+    done
+    [[ -n "$name" ]] || die "create-workspace: --name is required"
+    [[ -n "$cwd" ]] || die "create-workspace: --cwd is required"
+    require_uuid window "$window"
+    create_workspace "$name" "$cwd" "$window"
     ;;
 
   send|send-key)

@@ -25,6 +25,10 @@ FAKE="$TMP/cmux"
 SURFACE="BE7E2B29-66BA-44B4-BE66-73B85C85C7F3"
 ORIGIN_SURFACE="8AA280A2-FEB8-4733-B750-2681FA2C2985"
 WS="90D8E74A-E0EE-4FCB-8F7C-105574F46F01"
+WIN="7D14BE4C-2C6A-4E4C-90B1-3B6B12C69D02"
+TARGET_WS="6EB41F10-C6EE-4D9E-8F0A-659D9D37E042"
+TARGET_WS_2="2E54B129-AEE4-4ED3-AB42-7D7D122D9F4E"
+CREATED_WS="CE5E0B0C-71D1-409F-8874-5E99856DB588"
 
 # --- stateful fake cmux ----------------------------------------------------
 # Logs every invocation to $FAKE_CALLS and simulates a terminal screen via
@@ -43,10 +47,38 @@ kc=0; [[ -f "$keyfile" ]] && kc=$(cat "$keyfile")
 case "$sub" in
   identify)
     [[ "${FAKE_SCENARIO:-}" == cmux-down ]] && { echo "cmux: daemon not running" >&2; exit 1; }
-    printf '{ "caller": { "workspace_id": "%s", "surface_id": "%s" } }\n' "$FAKE_WS" "$FAKE_ORIGIN_SURFACE"
+    printf '{ "caller": { "window_id": "%s", "workspace_id": "%s", "surface_id": "%s" } }\n' "$FAKE_WINDOW" "$FAKE_WS" "$FAKE_ORIGIN_SURFACE"
     ;;
   list-workspaces|workspace)
-    printf '{ "workspaces": [ { "id": "%s", "ref": "workspace:9", "current_directory": "%s" } ] }\n' "$FAKE_WS" "$FAKE_CWD"
+    case "${FAKE_WORKSPACE_MODE:-default}" in
+      existing-name)
+        printf '{ "workspaces": ['
+        printf '{ "id": "%s", "ref": "workspace:9", "title": "caller", "custom_title": "caller", "current_directory": "%s" },' "$FAKE_WS" "$FAKE_CWD"
+        printf '{ "id": "%s", "ref": "workspace:10", "title": "aiml-services", "custom_title": "aiml-services", "current_directory": "%s" }' "$FAKE_TARGET_WS" "$FAKE_TARGET_CWD"
+        printf '] }\n'
+        ;;
+      title-name)
+        printf '{ "workspaces": ['
+        printf '{ "id": "%s", "ref": "workspace:9", "title": "caller", "custom_title": "caller", "current_directory": "%s" },' "$FAKE_WS" "$FAKE_CWD"
+        printf '{ "id": "%s", "ref": "workspace:10", "title": "repo-title", "custom_title": null, "current_directory": "%s" }' "$FAKE_TARGET_WS" "$FAKE_TARGET_CWD"
+        printf '] }\n'
+        ;;
+      duplicate-name)
+        printf '{ "workspaces": ['
+        printf '{ "id": "%s", "ref": "workspace:10", "title": "aiml-services", "custom_title": "aiml-services", "current_directory": "%s" },' "$FAKE_TARGET_WS" "$FAKE_TARGET_CWD"
+        printf '{ "id": "%s", "ref": "workspace:11", "title": "aiml-services", "custom_title": "other", "current_directory": "%s" }' "$FAKE_TARGET_WS_2" "$FAKE_TARGET_CWD"
+        printf '] }\n'
+        ;;
+      missing-name|unknown-id)
+        printf '{ "workspaces": [ { "id": "%s", "ref": "workspace:9", "title": "caller", "custom_title": "caller", "current_directory": "%s" } ] }\n' "$FAKE_WS" "$FAKE_CWD"
+        ;;
+      *)
+        printf '{ "workspaces": [ { "id": "%s", "ref": "workspace:9", "current_directory": "%s" } ] }\n' "$FAKE_WS" "$FAKE_CWD"
+        ;;
+    esac
+    ;;
+  new-workspace)
+    echo "OK workspace:12 ($FAKE_CREATED_WS) surface:50 (INITIAL-SURFACE-UUID)"
     ;;
   new-surface)
     echo "OK surface:43 ($FAKE_SURFACE) pane:16 (PANE-UUID) workspace:9 ($FAKE_WS)"
@@ -143,8 +175,10 @@ ok() { local desc=$1; shift; if "$@"; then pass; else fail "$desc"; fi; }
 no() { local desc=$1; shift; if "$@"; then fail "$desc"; else pass; fi; }
 
 SCENARIO=""        # set per test before calling spawn()
+WORKSPACE_MODE="default"
 POLLS=30
 DEFAULT_CWD=""     # the caller workspace dir the fake reports
+TARGET_CWD=""
 LAST_OUT=""
 LAST_ERR=""
 LAST_RC=0
@@ -156,8 +190,10 @@ spawn() {
   local errfile="$TMP/stderr"
   LAST_OUT=$(CMUX_BIN="$FAKE" FAKE_CALLS="$CALLS" FAKE_STATE="$STATE" \
     FAKE_SURFACE="$SURFACE" FAKE_WS="$WS" FAKE_CWD="$DEFAULT_CWD" \
+    FAKE_WINDOW="$WIN" FAKE_TARGET_WS="$TARGET_WS" FAKE_TARGET_WS_2="$TARGET_WS_2" \
+    FAKE_CREATED_WS="$CREATED_WS" FAKE_TARGET_CWD="$TARGET_CWD" \
     FAKE_ORIGIN_SURFACE="$ORIGIN_SURFACE" \
-    FAKE_SCENARIO="$SCENARIO" \
+    FAKE_SCENARIO="$SCENARIO" FAKE_WORKSPACE_MODE="$WORKSPACE_MODE" \
     ORCA_READY_POLLS="$POLLS" ORCA_POLL_INTERVAL=0 ORCA_MODE_INTERVAL=0 \
     "$SPAWN" "$@" 2>"$errfile")
   LAST_RC=$?
@@ -170,7 +206,7 @@ count_enter_keys() { grep -c $'\tenter$' "$CALLS"; }
 calls_have() { grep -qF -- "$1" "$CALLS"; }
 calls_have_line() { grep -qxF -- "$1" "$CALLS"; }
 called_subcommand() { grep -qE "^$1(\t|$)" "$CALLS"; }
-mentions() { grep -qiF "$1" <<<"$LAST_OUT"$'\n'"$LAST_ERR"; }
+mentions() { grep -qiF -- "$1" <<<"$LAST_OUT"$'\n'"$LAST_ERR"; }
 mentions_err() { grep -qF "$1" <<<"$LAST_ERR"; }
 rc_is() { [[ "$LAST_RC" -eq "$1" ]]; }
 rc_not() { [[ "$LAST_RC" -ne "$1" ]]; }
@@ -184,10 +220,12 @@ spawn_must_finish() {
   local timeout=$1; shift
   local out="$TMP/timeout.out" err="$TMP/timeout.err" done="$TMP/timeout.done"
   rm -f "$out" "$err" "$done"
-  CMUX_BIN="$FAKE" FAKE_CALLS="$CALLS" FAKE_STATE="$STATE" \
+    CMUX_BIN="$FAKE" FAKE_CALLS="$CALLS" FAKE_STATE="$STATE" \
     FAKE_SURFACE="$SURFACE" FAKE_WS="$WS" FAKE_CWD="$DEFAULT_CWD" \
+    FAKE_WINDOW="$WIN" FAKE_TARGET_WS="$TARGET_WS" FAKE_TARGET_WS_2="$TARGET_WS_2" \
+    FAKE_CREATED_WS="$CREATED_WS" FAKE_TARGET_CWD="$TARGET_CWD" \
     FAKE_ORIGIN_SURFACE="$ORIGIN_SURFACE" \
-    FAKE_SCENARIO="$SCENARIO" \
+    FAKE_SCENARIO="$SCENARIO" FAKE_WORKSPACE_MODE="$WORKSPACE_MODE" \
     ORCA_READY_POLLS="$POLLS" ORCA_POLL_INTERVAL=0 ORCA_MODE_INTERVAL=0 \
     "$SPAWN" "$@" >"$out" 2>"$err" &
   local pid=$!
@@ -214,6 +252,8 @@ spawn --agent claude --task "Fix the login bug" --brief "Make login work."
 ok  "claude: exits 0"                      rc_is 0
 ok  "claude: status=ok"                    eq "$(field status)" ok
 ok  "claude: returns the surface UUID"     eq "$(field surface)" "$SURFACE"
+ok  "claude: reports caller workspace"     eq "$(field workspace)" "$WS"
+ok  "claude: reports workspace not created" eq "$(field workspace_created)" false
 ok  "claude: task id is a kebab slug"      eq "$(field task_id)" "fix-the-login-bug"
 ok  "claude: tab named from task id"       eq "$(field tab)" "fix-the-login-bug"
 ok  "claude: cycles shift+tab to auto (3)" eq "$(count_shift_tabs)" 3
@@ -299,6 +339,112 @@ DEFAULT_CWD="$WORK4"; SCENARIO=codex
 spawn --agent codex --task "Default cwd" --brief "y"   # no --cwd
 ok  "default cwd: brief written under caller workspace dir" \
       test -f "$WORK4/.orca/briefs/default-cwd.md"
+
+# === Existing target workspace by custom title =============================
+WORK_TARGET="$TMP/repo-target"; mkdir -p "$WORK_TARGET"
+WORK_CALLER="$TMP/repo-caller"; mkdir -p "$WORK_CALLER"
+DEFAULT_CWD="$WORK_CALLER"; TARGET_CWD="$WORK_TARGET"; WORKSPACE_MODE=existing-name; SCENARIO=codex
+spawn --agent codex --task "Review target" --brief "Review it." --workspace-name "aiml-services"
+WORKSPACE_MODE=default
+
+ok  "workspace name: exits 0"                    rc_is 0
+ok  "workspace name: reports target workspace"   eq "$(field workspace)" "$TARGET_WS"
+ok  "workspace name: reports matched name"       eq "$(field workspace_name)" "aiml-services"
+ok  "workspace name: reports not created"        eq "$(field workspace_created)" false
+ok  "workspace name: worker created in target"   calls_have_line $'new-surface\t--type\tterminal\t--workspace\t'"$TARGET_WS"$'\t--working-directory\t'"$WORK_TARGET"$'\t--focus\tfalse\t--id-format\tboth'
+ok  "workspace name: brief written under target cwd" test -f "$WORK_TARGET/.orca/briefs/review-target.md"
+no  "workspace name: no workspace created"       called_subcommand new-workspace
+
+# === Existing target workspace by title fallback ===========================
+WORK_TITLE="$TMP/repo-title"; mkdir -p "$WORK_TITLE"
+DEFAULT_CWD="$WORK_CALLER"; TARGET_CWD="$WORK_TITLE"; WORKSPACE_MODE=title-name; SCENARIO=codex
+spawn --agent codex --task "Title match" --brief "Use title." --workspace-name "repo-title"
+WORKSPACE_MODE=default
+
+ok  "workspace title: reports target workspace" eq "$(field workspace)" "$TARGET_WS"
+ok  "workspace title: reports matched title"    eq "$(field workspace_name)" "repo-title"
+ok  "workspace title: brief written under title cwd" test -f "$WORK_TITLE/.orca/briefs/title-match.md"
+
+# === Existing target workspace honours explicit cwd ========================
+WORK_OVERRIDE="$TMP/repo-override"; mkdir -p "$WORK_OVERRIDE"
+DEFAULT_CWD="$WORK_CALLER"; TARGET_CWD="$WORK_TARGET"; WORKSPACE_MODE=existing-name; SCENARIO=codex
+spawn --agent codex --task "Override cwd" --brief "Override." --workspace-name "aiml-services" --cwd "$WORK_OVERRIDE"
+WORKSPACE_MODE=default
+
+ok  "workspace name cwd: reports target workspace" eq "$(field workspace)" "$TARGET_WS"
+ok  "workspace name cwd: reports override cwd"     eq "$(field cwd)" "$WORK_OVERRIDE"
+ok  "workspace name cwd: worker uses override cwd" calls_have_line $'new-surface\t--type\tterminal\t--workspace\t'"$TARGET_WS"$'\t--working-directory\t'"$WORK_OVERRIDE"$'\t--focus\tfalse\t--id-format\tboth'
+ok  "workspace name cwd: brief written under override" test -f "$WORK_OVERRIDE/.orca/briefs/override-cwd.md"
+
+# === Duplicate exact target workspace names fail before mutation ===========
+DEFAULT_CWD="$WORK_CALLER"; TARGET_CWD="$WORK_TARGET"; WORKSPACE_MODE=duplicate-name; SCENARIO=codex
+spawn --agent codex --task "Ambiguous" --brief "x" --workspace-name "aiml-services"
+WORKSPACE_MODE=default
+
+ok  "workspace duplicate: exits non-zero"       rc_not 0
+ok  "workspace duplicate: status=error"         eq "$(field status)" error
+ok  "workspace duplicate: mentions ambiguous"   mentions "ambiguous"
+ok  "workspace duplicate: suggests workspace id" mentions "--workspace-id"
+no  "workspace duplicate: no workspace created" called_subcommand new-workspace
+no  "workspace duplicate: no worker surface"    called_subcommand new-surface
+
+# === Missing target workspace is created then worker spawned there =========
+WORK_CREATED="$TMP/repo-created"; mkdir -p "$WORK_CREATED"
+DEFAULT_CWD="$WORK_CREATED"; TARGET_CWD=""; WORKSPACE_MODE=missing-name; SCENARIO=codex
+spawn --agent codex --task "Create workspace" --brief "Create it." --workspace-name "new-repo"
+WORKSPACE_MODE=default
+
+ok  "workspace create: exits 0"                  rc_is 0
+ok  "workspace create: reports created workspace" eq "$(field workspace)" "$CREATED_WS"
+ok  "workspace create: reports name"             eq "$(field workspace_name)" "new-repo"
+ok  "workspace create: reports created true"     eq "$(field workspace_created)" true
+ok  "workspace create: creates no-focus workspace" calls_have_line $'new-workspace\t--name\tnew-repo\t--cwd\t'"$WORK_CREATED"$'\t--window\t'"$WIN"$'\t--focus\tfalse\t--id-format\tboth'
+ok  "workspace create: worker uses created workspace" calls_have_line $'new-surface\t--type\tterminal\t--workspace\t'"$CREATED_WS"$'\t--working-directory\t'"$WORK_CREATED"$'\t--focus\tfalse\t--id-format\tboth'
+
+# === Workspace UUID target =================================================
+WORK_UUID="$TMP/repo-uuid"; mkdir -p "$WORK_UUID"
+DEFAULT_CWD="$WORK_CALLER"; TARGET_CWD="$WORK_UUID"; WORKSPACE_MODE=existing-name; SCENARIO=codex
+spawn --agent codex --task "UUID target" --brief "Use UUID." --workspace-id "$TARGET_WS"
+WORKSPACE_MODE=default
+
+ok  "workspace id: exits 0"                 rc_is 0
+ok  "workspace id: reports target workspace" eq "$(field workspace)" "$TARGET_WS"
+ok  "workspace id: reports target name"      eq "$(field workspace_name)" "aiml-services"
+ok  "workspace id: reports not created"      eq "$(field workspace_created)" false
+ok  "workspace id: worker created in target" calls_have_line $'new-surface\t--type\tterminal\t--workspace\t'"$TARGET_WS"$'\t--working-directory\t'"$WORK_UUID"$'\t--focus\tfalse\t--id-format\tboth'
+
+# === Workspace selector validation happens before mutation =================
+DEFAULT_CWD="$WORK_CALLER"; TARGET_CWD="$WORK_UUID"; WORKSPACE_MODE=existing-name; SCENARIO=codex
+spawn --agent codex --task "Both selectors" --brief "x" --workspace-name "aiml-services" --workspace-id "$TARGET_WS"
+ok  "workspace both selectors: exits non-zero" rc_not 0
+ok  "workspace both selectors: explains choice" mentions "at most one"
+no  "workspace both selectors: no workspace created" called_subcommand new-workspace
+no  "workspace both selectors: no worker surface" called_subcommand new-surface
+
+DEFAULT_CWD="$WORK_CALLER"; TARGET_CWD="$WORK_UUID"; WORKSPACE_MODE=existing-name; SCENARIO=codex
+spawn --agent codex --task "Bad workspace id" --brief "x" --workspace-id workspace:3
+ok  "workspace id ref: exits non-zero"       rc_not 0
+ok  "workspace id ref: rejects positional ref" mentions "not a UUID"
+no  "workspace id ref: no workspace created" called_subcommand new-workspace
+no  "workspace id ref: no worker surface"    called_subcommand new-surface
+
+UNKNOWN_WS="11111111-2222-4333-8444-555555555555"
+DEFAULT_CWD="$WORK_CALLER"; TARGET_CWD="$WORK_UUID"; WORKSPACE_MODE=unknown-id; SCENARIO=codex
+spawn --agent codex --task "Unknown workspace" --brief "x" --workspace-id "$UNKNOWN_WS"
+WORKSPACE_MODE=default
+ok  "workspace id unknown: exits non-zero"    rc_not 0
+ok  "workspace id unknown: mentions not found" mentions "not found"
+no  "workspace id unknown: no workspace created" called_subcommand new-workspace
+no  "workspace id unknown: no worker surface" called_subcommand new-surface
+
+MISSING_CWD="$TMP/missing-cwd"
+DEFAULT_CWD="$WORK_CALLER"; TARGET_CWD="$MISSING_CWD"; WORKSPACE_MODE=existing-name; SCENARIO=codex
+spawn --agent codex --task "Missing cwd" --brief "x" --workspace-name "aiml-services"
+WORKSPACE_MODE=default
+ok  "workspace missing cwd: exits non-zero" rc_not 0
+ok  "workspace missing cwd: explains cwd" mentions "working directory does not exist"
+no  "workspace missing cwd: no workspace created" called_subcommand new-workspace
+no  "workspace missing cwd: no worker surface" called_subcommand new-surface
 
 # === Codex readiness requires more than a bare chevron ======================
 WORK7="$TMP/repo-codex-chevron"; mkdir -p "$WORK7"

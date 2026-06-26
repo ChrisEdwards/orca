@@ -7,7 +7,9 @@ The plugin includes three skills:
 
 - `orca-spawn` launches one worker for one task, waits for the worker to reach
   its ready state, gives it a self-contained brief, and reports the resulting
-  cmux surface.
+  cmux workspace and surface. By default it uses the calling workspace; callers
+  can also target an existing workspace by UUID, select or create a workspace
+  by exact name, and override the worker working directory with `--cwd`.
 - `orca-fork` forks an existing Codex or Claude Code conversation into a new
   cmux tab, preserving conversation history, and reports the resulting surface.
 - `orca-msg` delivers a follow-up message to an existing agent instance in a

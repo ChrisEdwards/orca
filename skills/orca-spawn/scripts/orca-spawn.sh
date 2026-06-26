@@ -14,11 +14,15 @@
 #
 # Usage:
 #   orca-spawn --agent <claude|codex> --task <title> \
-#              (--brief <text> | --brief-file <path>) [--cwd <dir>]
+#              (--brief <text> | --brief-file <path>) [--cwd <dir>] \
+#              [--workspace-name <name> | --workspace-id <uuid>]
 #
 # Output (stdout, key=value lines):
 #   status=ok|error
 #   task_id=<kebab slug>
+#   workspace=<target workspace UUID>
+#   workspace_name=<target workspace name if known>
+#   workspace_created=true|false
 #   surface=<worker surface UUID>      (once the tab is created)
 #   tab=<task id>
 #   cwd=<resolved working directory>
@@ -50,15 +54,22 @@ ORCA_MODE_INTERVAL=${ORCA_MODE_INTERVAL:-1}
 
 # State filled in as we go, so spawn_fail can report what exists.
 TASK_ID=""
+WORKSPACE=""
+WORKSPACE_NAME=""
+WORKSPACE_CREATED=""
 SURFACE=""
 CWD=""
 BRIEF_REL=""
 ORIGIN_SURFACE=""
+UUID_RE='^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$'
 
 die() {
   local msg=$1
   printf 'status=error\n'
   [[ -n "$TASK_ID" ]] && printf 'task_id=%s\n' "$TASK_ID"
+  [[ -n "$WORKSPACE" ]] && printf 'workspace=%s\n' "$WORKSPACE"
+  [[ -n "$WORKSPACE_NAME" ]] && printf 'workspace_name=%s\n' "$WORKSPACE_NAME"
+  [[ -n "$WORKSPACE_CREATED" ]] && printf 'workspace_created=%s\n' "$WORKSPACE_CREATED"
   [[ -n "$SURFACE" ]] && printf 'surface=%s\n' "$SURFACE"
   [[ -n "$CWD" ]] && printf 'cwd=%s\n' "$CWD"
   [[ -n "$BRIEF_REL" ]] && printf 'brief=%s\n' "$BRIEF_REL"
@@ -71,6 +82,12 @@ need_value() {
   local flag=$1
   shift
   (($# >= 2)) || die "$flag needs a value"
+}
+
+require_uuid_value() {
+  local label=$1 value=$2
+  [[ -n "$value" ]] || die "$label is required"
+  [[ "$value" =~ $UUID_RE ]] || die "$label '$value' is not a UUID; positional refs drift, pass the stable UUID"
 }
 
 is_ready() {
@@ -119,6 +136,9 @@ spawn_fail() {
   local msg=$1
   printf 'status=error\n'
   [[ -n "$TASK_ID" ]] && printf 'task_id=%s\n' "$TASK_ID"
+  [[ -n "$WORKSPACE" ]] && printf 'workspace=%s\n' "$WORKSPACE"
+  [[ -n "$WORKSPACE_NAME" ]] && printf 'workspace_name=%s\n' "$WORKSPACE_NAME"
+  [[ -n "$WORKSPACE_CREATED" ]] && printf 'workspace_created=%s\n' "$WORKSPACE_CREATED"
   [[ -n "$SURFACE" ]] && printf 'surface=%s\n' "$SURFACE"
   [[ -n "$CWD" ]] && printf 'cwd=%s\n' "$CWD"
   [[ -n "$BRIEF_REL" ]] && printf 'brief=%s\n' "$BRIEF_REL"
@@ -133,22 +153,26 @@ spawn_fail() {
 }
 
 # --- parse arguments -------------------------------------------------------
-agent=""; task=""; brief=""; brief_file=""; cwd_override=""
+agent=""; task=""; brief=""; brief_file=""; cwd_override=""; workspace_name_selector=""; workspace_id_selector=""
 have_brief_text=0; have_brief_file=0
 while (($#)); do
   case "$1" in
-    --agent)      need_value --agent "$@"; agent=$2; shift 2 ;;
-    --task)       need_value --task "$@"; task=$2; shift 2 ;;
-    --brief)      need_value --brief "$@"; brief=$2; have_brief_text=1; shift 2 ;;
-    --brief-file) need_value --brief-file "$@"; brief_file=$2; have_brief_file=1; shift 2 ;;
-    --cwd)        need_value --cwd "$@"; cwd_override=$2; shift 2 ;;
-    -h|--help)    die "usage: orca-spawn --agent <claude|codex> --task <title> (--brief <text>|--brief-file <path>) [--cwd <dir>]" ;;
+    --agent)          need_value --agent "$@"; agent=$2; shift 2 ;;
+    --task)           need_value --task "$@"; task=$2; shift 2 ;;
+    --brief)          need_value --brief "$@"; brief=$2; have_brief_text=1; shift 2 ;;
+    --brief-file)     need_value --brief-file "$@"; brief_file=$2; have_brief_file=1; shift 2 ;;
+    --cwd)            need_value --cwd "$@"; cwd_override=$2; shift 2 ;;
+    --workspace-name) need_value --workspace-name "$@"; workspace_name_selector=$2; shift 2 ;;
+    --workspace-id)   need_value --workspace-id "$@"; workspace_id_selector=$2; shift 2 ;;
+    -h|--help)        die "usage: orca-spawn --agent <claude|codex> --task <title> (--brief <text>|--brief-file <path>) [--cwd <dir>] [--workspace-name <name>|--workspace-id <uuid>]" ;;
     *) die "unexpected argument: $1" ;;
   esac
 done
 [[ -n "$agent" ]] || die "--agent is required"
 [[ -n "$task" ]]  || die "--task is required"
 ((have_brief_text + have_brief_file == 1)) || die "exactly one of --brief or --brief-file is required"
+[[ -z "$workspace_name_selector" || -z "$workspace_id_selector" ]] || die "at most one workspace selector may be supplied"
+[[ -z "$workspace_id_selector" ]] || require_uuid_value "--workspace-id" "$workspace_id_selector"
 
 # --- adapter selection (validates the agent type) --------------------------
 launch=$("$ORCA_ADAPTER" "$agent" launch 2>/dev/null) \
@@ -162,19 +186,74 @@ if [[ -n "$brief_file" ]]; then
   brief=$(cat "$brief_file")
 fi
 
-# --- 1. resolve the calling workspace UUID and directory -------------------
-identify=$(CMUX_QUIET=1 "$CMUX_BIN" identify --json --id-format both 2>/dev/null) \
+# --- 1. resolve the target workspace UUID and directory --------------------
+identify=$(CMUX_QUIET=1 "$ORCA_CMUX" identify-json 2>/dev/null) \
   || die "cannot reach cmux (is it running, and are we inside a cmux terminal?)"
 ws=$(jq -r '.caller.workspace_id // empty' <<<"$identify" 2>/dev/null)
 [[ -n "$ws" ]] || die "could not resolve the calling workspace UUID from cmux identify"
+window=$(jq -r '.caller.window_id // .window_id // empty' <<<"$identify" 2>/dev/null)
 resolve_origin_surface
 
-if [[ -n "$cwd_override" ]]; then
-  CWD=$cwd_override
+workspaces=$(CMUX_QUIET=1 "$ORCA_CMUX" list-workspaces-json 2>/dev/null) \
+  || die "could not list cmux workspaces"
+
+caller_cwd=$(jq -r --arg ws "$ws" \
+  '(.workspaces // .items // [])[]? | select(.id==$ws) | .current_directory // empty' \
+  <<<"$workspaces" 2>/dev/null | head -1)
+caller_name=$(jq -r --arg ws "$ws" \
+  '(.workspaces // .items // [])[]? | select(.id==$ws) | if (.custom_title // "") != "" then .custom_title else (.title // "") end' \
+  <<<"$workspaces" 2>/dev/null | head -1)
+
+WORKSPACE_CREATED=false
+
+if [[ -n "$workspace_name_selector" ]]; then
+  match_count=$(jq -r --arg name "$workspace_name_selector" \
+    '[ (.workspaces // .items // [])[]? | select((.custom_title // "") == $name or (.title // "") == $name) ] | length' \
+    <<<"$workspaces" 2>/dev/null)
+  [[ "$match_count" =~ ^[0-9]+$ ]] || die "could not parse cmux workspace list"
+  if ((match_count > 1)); then
+    die "workspace name '$workspace_name_selector' is ambiguous; use --workspace-id with a stable workspace UUID"
+  elif ((match_count == 1)); then
+    WORKSPACE=$(jq -r --arg name "$workspace_name_selector" \
+      '[ (.workspaces // .items // [])[]? | select((.custom_title // "") == $name or (.title // "") == $name) ][0].id' \
+      <<<"$workspaces")
+    WORKSPACE_NAME=$(jq -r --arg name "$workspace_name_selector" \
+      '[ (.workspaces // .items // [])[]? | select((.custom_title // "") == $name or (.title // "") == $name) ][0] | if (.custom_title // "") == $name then (.custom_title // "") else (.title // "") end' \
+      <<<"$workspaces")
+    workspace_cwd=$(jq -r --arg name "$workspace_name_selector" \
+      '[ (.workspaces // .items // [])[]? | select((.custom_title // "") == $name or (.title // "") == $name) ][0].current_directory // empty' \
+      <<<"$workspaces")
+    CWD=${cwd_override:-$workspace_cwd}
+  else
+    WORKSPACE_NAME=$workspace_name_selector
+    CWD=${cwd_override:-$caller_cwd}
+    [[ -n "$CWD" ]] || CWD=$PWD
+    [[ -d "$CWD" ]] || die "working directory does not exist: $CWD"
+    [[ -n "$window" ]] || die "could not resolve the calling window UUID from cmux identify"
+    require_uuid_value "window" "$window"
+    WORKSPACE=$("$ORCA_CMUX" create-workspace --name "$workspace_name_selector" --cwd "$CWD" --window "$window" 2>/dev/null) \
+      || die "could not create target workspace '$workspace_name_selector'"
+    [[ -n "$WORKSPACE" ]] || die "create-workspace returned no workspace UUID"
+    WORKSPACE_CREATED=true
+  fi
+elif [[ -n "$workspace_id_selector" ]]; then
+  match_count=$(jq -r --arg ws "$workspace_id_selector" \
+    '[ (.workspaces // .items // [])[]? | select(.id==$ws) ] | length' \
+    <<<"$workspaces" 2>/dev/null)
+  [[ "$match_count" =~ ^[0-9]+$ ]] || die "could not parse cmux workspace list"
+  ((match_count == 1)) || die "workspace id not found in caller window: $workspace_id_selector"
+  WORKSPACE=$workspace_id_selector
+  WORKSPACE_NAME=$(jq -r --arg ws "$workspace_id_selector" \
+    '[ (.workspaces // .items // [])[]? | select(.id==$ws) ][0] | if (.custom_title // "") != "" then .custom_title else (.title // "") end' \
+    <<<"$workspaces")
+  workspace_cwd=$(jq -r --arg ws "$workspace_id_selector" \
+    '[ (.workspaces // .items // [])[]? | select(.id==$ws) ][0].current_directory // empty' \
+    <<<"$workspaces")
+  CWD=${cwd_override:-$workspace_cwd}
 else
-  CWD=$(CMUX_QUIET=1 "$CMUX_BIN" list-workspaces --json --id-format both 2>/dev/null \
-    | jq -r --arg ws "$ws" '.workspaces[]? | select(.id==$ws) | .current_directory // empty' 2>/dev/null)
-  # Fall back to the invoking directory if cmux does not report one.
+  WORKSPACE=$ws
+  WORKSPACE_NAME=$caller_name
+  CWD=${cwd_override:-$caller_cwd}
   [[ -n "$CWD" ]] || CWD=$PWD
 fi
 [[ -d "$CWD" ]] || die "working directory does not exist: $CWD"
@@ -214,7 +293,7 @@ else
 fi
 
 # --- 4. create the worker tab (every later op targets this UUID) -----------
-SURFACE=$("$ORCA_CMUX" create-tab --workspace "$ws" --cwd "$CWD" 2>/dev/null) \
+SURFACE=$("$ORCA_CMUX" create-tab --workspace "$WORKSPACE" --cwd "$CWD" 2>/dev/null) \
   || die "could not create the worker tab (cmux unreachable?)"
 [[ -n "$SURFACE" ]] || die "create-tab returned no surface UUID"
 
@@ -277,6 +356,9 @@ delivery=$(append_parent_footer "Read $BRIEF_REL and carry out the task it descr
 # --- 9. report back --------------------------------------------------------
 printf 'status=ok\n'
 printf 'task_id=%s\n' "$TASK_ID"
+printf 'workspace=%s\n' "$WORKSPACE"
+printf 'workspace_name=%s\n' "$WORKSPACE_NAME"
+printf 'workspace_created=%s\n' "$WORKSPACE_CREATED"
 printf 'surface=%s\n' "$SURFACE"
 printf 'tab=%s\n' "$TASK_ID"
 printf 'cwd=%s\n' "$CWD"

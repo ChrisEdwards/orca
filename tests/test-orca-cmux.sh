@@ -33,6 +33,9 @@ case "$1" in
   new-surface)
     echo "OK surface:43 (${FAKE_SURFACE_UUID:-AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE}) pane:16 (PPPPPPPP-0000-0000-0000-000000000000) workspace:9 (WWWWWWWW-0000-0000-0000-000000000000)"
     ;;
+  new-workspace)
+    echo "OK workspace:9 (${FAKE_WORKSPACE_UUID:-11111111-2222-3333-4444-555555555555}) surface:43 (${FAKE_SURFACE_UUID:-AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE})"
+    ;;
   identify)
     echo '{ "caller": { "surface_id": "ORIGIN-SURFACE", "workspace_id": "ORIGIN-WORKSPACE" } }'
     ;;
@@ -70,11 +73,13 @@ fail() {
 
 WS=90D8E74A-E0EE-4FCB-8F7C-105574F46F01
 SFC=595D95B0-7C06-4767-BF6C-7E424D91FB8C
+WIN=54BC22C9-4057-4781-80B0-4732CC06E64F
+NEW_WS=F7AC8916-1937-479B-8602-3FB8423DBCD7
 
 # Run orca-cmux with the fake cmux wired in. Resets the call log first.
 orca() {
   : > "$CALL_LOG"
-  CMUX_BIN="$FAKE" CMUX_CALL_LOG="$CALL_LOG" FAKE_SURFACE_UUID="$SFC" \
+  CMUX_BIN="$FAKE" CMUX_CALL_LOG="$CALL_LOG" FAKE_SURFACE_UUID="$SFC" FAKE_WORKSPACE_UUID="$NEW_WS" \
     "$ORCA_CMUX" "$@"
 }
 
@@ -121,6 +126,12 @@ assert_eq "create-tab returns parsed surface UUID" "$SFC" "$out"
 orca create-tab --workspace "$WS" --cwd "/tmp/project with spaces" >/dev/null
 assert_args "create-tab passes cwd as working-directory" \
   new-surface --type terminal --workspace "$WS" --working-directory "/tmp/project with spaces" --focus false --id-format both
+
+# create-workspace builds the verified no-focus workspace command and returns the workspace UUID.
+out=$(orca create-workspace --name "aiml-services" --cwd "/tmp/aiml services" --window "$WIN")
+assert_args "create-workspace emits verified new-workspace command" \
+  new-workspace --name "aiml-services" --cwd "/tmp/aiml services" --window "$WIN" --focus false --id-format both
+assert_eq "create-workspace returns parsed workspace UUID" "$NEW_WS" "$out"
 
 # send emits the verified send command, text addressed by surface UUID.
 orca send --surface "$SFC" "echo hello" >/dev/null
@@ -201,6 +212,13 @@ else
   pass
 fi
 assert_no_cmux_call "create-tab rejects workspace ref before touching cmux"
+
+if orca create-workspace --name target --cwd /tmp --window window:1 2>/dev/null; then
+  fail "create-workspace must reject a window ref"
+else
+  pass
+fi
+assert_no_cmux_call "create-workspace rejects window ref before touching cmux"
 
 if orca list-surfaces-json --workspace workspace:9 2>/dev/null; then
   fail "list-surfaces-json must reject a workspace ref"
