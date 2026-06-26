@@ -88,6 +88,52 @@ JSON
             printf 'Do you want to allow this command?\n'
             printf '1. Yes\n2. No\n'
             ;;
+          stale-claude-shell)
+            printf 'Previous Claude turn finished here.\n'
+            printf '  ? for shortcuts                                   ← for agents\n'
+            printf '\n'
+            printf 'chrisedwards@host orca-73y-msg-readiness %% \n'
+            ;;
+          stale-claude-starship-shell)
+            printf 'Previous Claude turn finished here.\n'
+            printf '  ? for shortcuts                                   ← for agents\n'
+            printf '\n'
+            printf '%s\n' '~/project on  main ❯ '
+            ;;
+          stale-claude-user-path-shell)
+            printf 'Previous Claude turn finished here.\n'
+            printf '  ? for shortcuts                                   ← for agents\n'
+            printf '\n'
+            printf '%s\n' 'user ~/project> '
+            ;;
+          stale-marker-high-scrollback)
+            printf 'Old Claude turn finished here.\n'
+            printf '  ? for shortcuts                                   ← for agents\n'
+            printf 'Build step one completed.\n'
+            printf 'Build step two completed.\n'
+            printf 'Build step three completed.\n'
+            printf 'Build step four completed.\n'
+            printf 'Build step five completed.\n'
+            printf '%s\n' '~/project on  main ❯ '
+            ;;
+          claude-ready-question-prose)
+            printf 'Should I continue with the next step? Want me to continue?\n'
+            printf '  ? for shortcuts                                   ← for agents\n'
+            ;;
+          claude-busy)
+            printf '  ? for shortcuts                                   ← for agents\n'
+            printf 'Running command: bash tests/test-orca-msg.sh\n'
+            printf 'esc to interrupt\n'
+            ;;
+          permission-prompt)
+            printf 'Claude needs your approval before using this tool.\n'
+            printf 'Allow tool execution?\n'
+            printf '1. Allow\n2. Deny\n'
+            ;;
+          unknown-ui)
+            printf 'vim README.md\n'
+            printf '-- INSERT --\n'
+            ;;
           *)
             printf '  ? for shortcuts                                   ← for agents\n'
             ;;
@@ -99,6 +145,18 @@ JSON
             printf '  Do you trust the contents of this directory?\n'
             printf '› 1. Yes, continue\n'
             printf '  2. No, quit\n'
+            ;;
+          stale-codex-shell)
+            printf '› Implement {feature}\n'
+            printf 'gpt-5.5 high · /work/aiml-services\n'
+            printf '\n'
+            printf '/work/aiml-services $ \n'
+            ;;
+          stale-codex-themed-shell)
+            printf '› Implement {feature}\n'
+            printf 'gpt-5.5 high · /work/aiml-services\n'
+            printf '\n'
+            printf '%s\n' '~/project on  main ❯ '
             ;;
           *)
             printf '› Implement {feature}\n'
@@ -236,6 +294,100 @@ ok  "blocked: status=error"             eq "$(field status)" error
 ok  "blocked: explains not ready"       mentions "not ready"
 no  "blocked: does not send text"       called_subcommand send
 no  "blocked: does not press enter"     called_subcommand send-key
+
+# === Stale prompt markers in scrollback are refused ========================
+SCENARIO=stale-claude-shell
+msg_run --surface "$SFC_CLAUDE" --agent claude --message "Do not type into shell."
+
+ok  "stale claude shell: exits non-zero" rc_not 0
+ok  "stale claude shell: status=error"   eq "$(field status)" error
+ok  "stale claude shell: explains not ready" mentions "not ready"
+no  "stale claude shell: does not send text" called_subcommand send
+no  "stale claude shell: does not press enter" called_subcommand send-key
+
+SCENARIO=stale-claude-starship-shell
+msg_run --surface "$SFC_CLAUDE" --agent claude --message "Do not type into themed shell."
+
+ok  "stale claude starship shell: exits non-zero" rc_not 0
+ok  "stale claude starship shell: status=error"   eq "$(field status)" error
+ok  "stale claude starship shell: explains not ready" mentions "not ready"
+no  "stale claude starship shell: does not send text" called_subcommand send
+no  "stale claude starship shell: does not press enter" called_subcommand send-key
+
+SCENARIO=stale-claude-user-path-shell
+msg_run --surface "$SFC_CLAUDE" --agent claude --message "Do not type into user path shell."
+
+ok  "stale claude user path shell: exits non-zero" rc_not 0
+ok  "stale claude user path shell: status=error"   eq "$(field status)" error
+ok  "stale claude user path shell: explains not ready" mentions "not ready"
+no  "stale claude user path shell: does not send text" called_subcommand send
+no  "stale claude user path shell: does not press enter" called_subcommand send-key
+
+SCENARIO=stale-marker-high-scrollback
+msg_run --surface "$SFC_CLAUDE" --agent claude --message "Do not type into high scrollback shell."
+
+ok  "high scrollback stale marker: exits non-zero" rc_not 0
+ok  "high scrollback stale marker: status=error"   eq "$(field status)" error
+ok  "high scrollback stale marker: explains not ready" mentions "not ready"
+no  "high scrollback stale marker: does not send text" called_subcommand send
+no  "high scrollback stale marker: does not press enter" called_subcommand send-key
+
+SCENARIO=stale-codex-shell
+msg_run --surface "$SFC_CODEX" --agent codex --message "Do not type into shell."
+
+ok  "stale codex shell: exits non-zero" rc_not 0
+ok  "stale codex shell: status=error"   eq "$(field status)" error
+ok  "stale codex shell: explains not ready" mentions "not ready"
+no  "stale codex shell: does not send text" called_subcommand send
+no  "stale codex shell: does not press enter" called_subcommand send-key
+
+SCENARIO=stale-codex-themed-shell
+msg_run --surface "$SFC_CODEX" --agent codex --message "Do not type into themed shell."
+
+ok  "stale codex themed shell: exits non-zero" rc_not 0
+ok  "stale codex themed shell: status=error"   eq "$(field status)" error
+ok  "stale codex themed shell: explains not ready" mentions "not ready"
+no  "stale codex themed shell: does not send text" called_subcommand send
+no  "stale codex themed shell: does not press enter" called_subcommand send-key
+
+# === Ready agents are not refused for ordinary response prose ==============
+SCENARIO=claude-ready-question-prose
+msg_run --surface "$SFC_CLAUDE" --agent claude --message "Continue after question prose."
+
+ok  "ready question prose: exits 0"      rc_is 0
+ok  "ready question prose: status=ok"    eq "$(field status)" ok
+ok  "ready question prose: sends message" \
+      calls_have_line $'send\t--surface\t'"$SFC_CLAUDE"$'\t'"$(with_footer "Continue after question prose.")"
+ok  "ready question prose: presses enter" \
+      calls_have_line $'send-key\t--surface\t'"$SFC_CLAUDE"$'\tenter'
+
+# === Busy, permission, and unknown UI states are refused ===================
+SCENARIO=claude-busy
+msg_run --surface "$SFC_CLAUDE" --agent claude --message "Do not interrupt work."
+
+ok  "busy: exits non-zero"              rc_not 0
+ok  "busy: status=error"                eq "$(field status)" error
+ok  "busy: explains not ready"          mentions "not ready"
+no  "busy: does not send text"          called_subcommand send
+no  "busy: does not press enter"        called_subcommand send-key
+
+SCENARIO=permission-prompt
+msg_run --surface "$SFC_CLAUDE" --agent claude --message "Do not approve."
+
+ok  "permission: exits non-zero"        rc_not 0
+ok  "permission: status=error"          eq "$(field status)" error
+ok  "permission: explains blocked"      mentions "blocked on a prompt"
+no  "permission: does not send text"    called_subcommand send
+no  "permission: does not press enter"  called_subcommand send-key
+
+SCENARIO=unknown-ui
+msg_run --surface "$SFC_CLAUDE" --agent claude --message "Do not type into unknown UI."
+
+ok  "unknown ui: exits non-zero"        rc_not 0
+ok  "unknown ui: status=error"          eq "$(field status)" error
+ok  "unknown ui: explains not ready"    mentions "not ready"
+no  "unknown ui: does not send text"    called_subcommand send
+no  "unknown ui: does not press enter"  called_subcommand send-key
 
 # === Direct messages stay one cmux argv element ============================
 SCENARIO=happy
