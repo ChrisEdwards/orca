@@ -110,30 +110,138 @@ extract_surface_id() {
   sed -nE 's/^surface_id=([0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})$/\1/p' <<<"$1" | head -1
 }
 
+active_screen_region() {
+  awk '
+    {
+      sub(/\r$/, "")
+      if ($0 ~ /[^[:space:]]/) {
+        lines[++n] = $0
+      }
+    }
+    END {
+      start = n - 5
+      if (start < 1) start = 1
+      for (i = start; i <= n; i++) print lines[i]
+    }
+  ' <<<"$1"
+}
+
+live_input_region() {
+  awk '
+    {
+      sub(/\r$/, "")
+      if ($0 ~ /[^[:space:]]/) {
+        lines[++n] = $0
+      }
+    }
+    END {
+      start = n - 1
+      if (start < 1) start = 1
+      for (i = start; i <= n; i++) print lines[i]
+    }
+  ' <<<"$1"
+}
+
+last_non_empty_line() {
+  awk '
+    {
+      sub(/\r$/, "")
+      if ($0 ~ /[^[:space:]]/) {
+        line = $0
+      }
+    }
+    END {
+      if (line != "") print line
+    }
+  ' <<<"$1"
+}
+
 is_blocked_screen() {
-  local screen=$1
-  grep -qiE 'do you trust|is this a project you trust|allow this command|permission to|approve|merge editor|resolve conflicts|continue\?' <<<"$screen"
+  local region
+  region=$(active_screen_region "$1")
+  grep -qiE 'merge editor|resolve conflicts' <<<"$region" && return 0
+  grep -qiE '(^|[[:space:]])[0-9]+[.)][[:space:]]*(yes|no|allow|deny|continue|quit|approve|reject)($|[^[:alpha:]])' <<<"$region" && return 0
+  grep -qiE '(do you trust|is this a project you trust|trust the contents|do you want to allow|allow( this)? (command|tool|tool execution)|permission (to|required|needed))[^?]{0,120}\?' <<<"$region"
+}
+
+is_shell_prompt_screen() {
+  local line
+  line=$(last_non_empty_line "$1")
+  case "$line" in
+    *'← for agents'*|*'›'*) return 1 ;;
+  esac
+  if grep -Eq '^[[:space:]]*([$%#]|>|❯|➜)[[:space:]]*$' <<<"$line"; then
+    return 0
+  fi
+  if grep -Eq '^[[:space:]]*[^[:space:]]+@[^[:space:]]+.*[[:space:]]([$%#]|>|❯|➜)[[:space:]]*$' <<<"$line"; then
+    return 0
+  fi
+  if grep -Eq '^[[:space:]]*(/|~|\.{1,2}/)[^[:cntrl:]]*([$%#]|>|❯|➜)[[:space:]]*$' <<<"$line"; then
+    return 0
+  fi
+  if grep -Eq '^[[:space:]]*[^[:space:]]+[[:space:]]+(~|/|\.{1,2}/)[^[:cntrl:]]*([$%#]|>|❯|➜)[[:space:]]*$' <<<"$line"; then
+    return 0
+  fi
+  return 1
+}
+
+is_busy_screen() {
+  local region
+  region=$(active_screen_region "$1")
+  grep -qiE '(esc|ctrl-c|ctrl\+c|control-c).{0,40}interrupt|interrupt.{0,40}(esc|ctrl-c|ctrl\+c|control-c)|running command|executing command|working\.\.\.|thinking\.\.\.|streaming response' <<<"$region"
+}
+
+claude_screen_ready() {
+  local line
+  line=$(last_non_empty_line "$1")
+  grep -qF '← for agents' <<<"$line"
+}
+
+codex_screen_ready() {
+  local live line count first second
+  live=$(live_input_region "$1")
+  count=0
+  first=""
+  second=""
+  while IFS= read -r line; do
+    count=$((count + 1))
+    if [[ "$count" -eq 1 ]]; then
+      first=$line
+    elif [[ "$count" -eq 2 ]]; then
+      second=$line
+    fi
+  done <<<"$live"
+  [[ "$count" -eq 2 ]] || return 1
+  [[ "$first" == *'›'* && "$second" == *' · '* ]]
 }
 
 infer_agent_from_screen() {
-  local screen=$1
-  if grep -qF '← for agents' <<<"$screen"; then
+  local screen=$1 region
+  is_blocked_screen "$screen" && return 0
+  is_shell_prompt_screen "$screen" && return 0
+  is_busy_screen "$screen" && return 0
+  if claude_screen_ready "$screen"; then
     printf 'claude\n'
-  elif grep -qF '›' <<<"$screen" && grep -qF ' · ' <<<"$screen"; then
+  elif codex_screen_ready "$screen"; then
     printf 'codex\n'
-  elif grep -qiF 'Claude Code' <<<"$screen"; then
-    printf 'claude\n'
-  elif grep -qiF 'OpenAI Codex' <<<"$screen"; then
-    printf 'codex\n'
+  else
+    region=$(active_screen_region "$screen")
+    if grep -qiF 'Claude Code' <<<"$region"; then
+      printf 'claude\n'
+    elif grep -qiF 'OpenAI Codex' <<<"$region"; then
+      printf 'codex\n'
+    fi
   fi
 }
 
 screen_is_ready() {
   local screen=$1 agent=$2
   is_blocked_screen "$screen" && return 2
+  is_shell_prompt_screen "$screen" && return 2
+  is_busy_screen "$screen" && return 2
   case "$agent" in
-    claude) grep -qF '← for agents' <<<"$screen" ;;
-    codex) grep -qF '›' <<<"$screen" && grep -qF ' · ' <<<"$screen" ;;
+    claude) claude_screen_ready "$screen" ;;
+    codex) codex_screen_ready "$screen" ;;
     *) return 1 ;;
   esac
 }
