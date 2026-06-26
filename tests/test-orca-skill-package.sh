@@ -14,7 +14,6 @@ MSG_SKILL_DIR="$REPO_ROOT/skills/orca-msg"
 CODEX_SPAWN_SKILL_LINK="$REPO_ROOT/.agents/skills/orca-spawn"
 CODEX_FORK_SKILL_LINK="$REPO_ROOT/.agents/skills/orca-fork"
 CODEX_MSG_SKILL_LINK="$REPO_ROOT/.agents/skills/orca-msg"
-CLAUDE_SPAWN_SKILL_LINK="$REPO_ROOT/.claude/skills/orca-spawn"
 PLUGIN_MANIFEST="$REPO_ROOT/.codex-plugin/plugin.json"
 MARKETPLACE="$REPO_ROOT/.agents/plugins/marketplace.json"
 CLAUDE_PLUGIN_MANIFEST="$REPO_ROOT/.claude-plugin/plugin.json"
@@ -64,9 +63,9 @@ ok "orca-msg instructions point at bundled message script" grep -qF "scripts/orc
 ok "Codex orca-spawn project skill entry exists" test -L "$CODEX_SPAWN_SKILL_LINK"
 ok "Codex orca-spawn project skill entry points at canonical skill" eq "$(readlink "$CODEX_SPAWN_SKILL_LINK")" "../../skills/orca-spawn"
 ok "Codex orca-spawn project skill resolves to SKILL.md" test -f "$CODEX_SPAWN_SKILL_LINK/SKILL.md"
-ok "Claude orca-spawn project skill entry exists" test -L "$CLAUDE_SPAWN_SKILL_LINK"
-ok "Claude orca-spawn project skill entry points at canonical skill" eq "$(readlink "$CLAUDE_SPAWN_SKILL_LINK")" "../../skills/orca-spawn"
-ok "Claude orca-spawn project skill resolves to SKILL.md" test -f "$CLAUDE_SPAWN_SKILL_LINK/SKILL.md"
+# Claude discovers skills via the plugin's "skills": "./skills/" auto-discovery,
+# so there is no .claude/skills dev symlink (dropped in 6158cf3). The
+# .agents/skills/* symlinks remain the Codex dev-discovery convention.
 ok "Codex orca-fork project skill entry exists" test -L "$CODEX_FORK_SKILL_LINK"
 ok "Codex orca-fork project skill entry points at canonical skill" eq "$(readlink "$CODEX_FORK_SKILL_LINK")" "../../skills/orca-fork"
 ok "Codex orca-fork project skill resolves to SKILL.md" test -f "$CODEX_FORK_SKILL_LINK/SKILL.md"
