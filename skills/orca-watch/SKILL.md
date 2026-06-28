@@ -40,7 +40,7 @@ On the first transition it prints one JSON line and exits 0:
 - `event: turn_end` (`hook: Stop`) — the worker finished its turn and is idle. The orchestrator may collect results or advance the workflow.
 - `event: attention` — the worker paused on `Notification`, `PermissionRequest`, or `AskUserQuestion`. Tell the human to flip to the worker's tab, or message the worker.
 
-Exit codes: `0` matched, `3` timeout (`{"event":"timeout"}`), `4` stream closed first, `2` usage or resolve error.
+Exit codes: `0` matched, `3` timeout (`{"event":"timeout"}`, including unresolved Codex sessions once `--timeout` expires), `4` stream closed first, `2` usage or resolve error.
 
 ## Boundaries
 

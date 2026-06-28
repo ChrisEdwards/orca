@@ -105,6 +105,16 @@ PY
 done
 [[ -n "$session" ]] || die "could not resolve a session for surface $surface in $store within ${resolve_secs}s (worker may not have started, or hooks are off)"
 
+watch_timeout=$timeout
+if (( resolve_uses_timeout == 1 && timeout_deadline > 0 )); then
+  now=$(date +%s)
+  watch_timeout=$(( timeout_deadline - now ))
+  if (( watch_timeout <= 0 )); then
+    printf '{"event":"timeout","surface":"%s","agent":"%s"}\n' "$surface" "$agent"
+    exit 3
+  fi
+fi
+
 target="${agent}-${session}"
 
 # Stream the relevant lifecycle hooks and return on the first frame for our
@@ -112,7 +122,7 @@ target="${agent}-${session}"
 # a SIGPIPE on the producer can never mask a successful match.
 ORCA_TARGET="$target" ORCA_SURFACE="$surface" ORCA_AGENT="$agent" \
 ORCA_CMUX_BIN="${CMUX_BIN:-cmux}" \
-ORCA_AFTER="$after" ORCA_TIMEOUT="$timeout" python3 <<'PY'
+ORCA_AFTER="$after" ORCA_TIMEOUT="$watch_timeout" python3 <<'PY'
 import json, os, select, subprocess, sys, time
 
 target  = os.environ["ORCA_TARGET"]

@@ -116,6 +116,16 @@ JSON
             printf 'Build step five completed.\n'
             printf '%s\n' '~/project on  main ❯ '
             ;;
+          stale-permission-prompt-ready)
+            printf 'Allow tool execution?\n'
+            printf '1. Allow\n2. Deny\n'
+            printf 'Build step one completed.\n'
+            printf 'Build step two completed.\n'
+            printf 'Build step three completed.\n'
+            printf 'Build step four completed.\n'
+            printf 'Build step five completed.\n'
+            printf '  ? for shortcuts                                   ← for agents\n'
+            ;;
           claude-ready-question-prose)
             printf 'Should I continue with the next step? Want me to continue?\n'
             printf '  ? for shortcuts                                   ← for agents\n'
@@ -421,6 +431,16 @@ ok  "ready permission retry: status=ok"    eq "$(field status)" ok
 ok  "ready permission retry: sends message" \
       calls_have_line $'send\t--surface\t'"$SFC_CLAUDE"$'\t'"$(with_footer "Continue after permission retry.")"
 ok  "ready permission retry: presses enter" \
+      calls_have_line $'send-key\t--surface\t'"$SFC_CLAUDE"$'\tenter'
+
+SCENARIO=stale-permission-prompt-ready
+msg_run --surface "$SFC_CLAUDE" --agent claude --message "Continue after stale prompt."
+
+ok  "stale permission prompt ready: exits 0"      rc_is 0
+ok  "stale permission prompt ready: status=ok"    eq "$(field status)" ok
+ok  "stale permission prompt ready: sends message" \
+      calls_have_line $'send\t--surface\t'"$SFC_CLAUDE"$'\t'"$(with_footer "Continue after stale prompt.")"
+ok  "stale permission prompt ready: presses enter" \
       calls_have_line $'send-key\t--surface\t'"$SFC_CLAUDE"$'\tenter'
 
 # === Busy, permission, and unknown UI states are refused ===================

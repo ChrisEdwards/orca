@@ -39,7 +39,11 @@ ln -s "$SLEEP_BIN" "$PATH_DIR/sleep"
 cat > "$PATH_DIR/date" <<EOF
 #!/bin/bash
 if [[ "\${1:-}" == "+%s" && -n "\${FAKE_DATE_STATE:-}" ]]; then
-  current=\$(cat "\$FAKE_DATE_STATE" 2>/dev/null || printf '%s' "\${FAKE_DATE_START:-1000}")
+  if [[ -r "\$FAKE_DATE_STATE" ]]; then
+    IFS= read -r current < "\$FAKE_DATE_STATE"
+  else
+    current=\${FAKE_DATE_START:-1000}
+  fi
   printf '%s\n' "\$current"
   step=\${FAKE_DATE_STEP:-1}
   printf '%s\n' "\$((current + step))" > "\$FAKE_DATE_STATE"
@@ -80,6 +84,12 @@ case "$sub" in
         exec python3 - <<'PY'
 import time
 time.sleep(5)
+PY
+        ;;
+      timeout_after_resolve)
+        python3 - <<'PY'
+import time
+time.sleep(20)
 PY
         ;;
       stream_closed)
@@ -325,7 +335,7 @@ assert_jq "Codex default unresolved session reports timeout JSON" \
 
 write_empty_store codex
 TARGET="codex-$CODEX_SESSION"
-MODE="stop"
+MODE="timeout_after_resolve"
 RESOLVE_SECS=""
 DATE_STATE="$TMP/date-state"
 DATE_STEP="31"
@@ -336,6 +346,27 @@ printf '1000\n' > "$DATE_STATE"
 ) &
 writer_pid=$!
 run_watch codex "$SURFACE" 40 90
+wait "$writer_pid"
+assert_eq "Codex default timeout subtracts elapsed resolve time before subscribing" "3" "$RC"
+assert_jq "Codex late resolve reports timeout when no event arrives in the remaining window" \
+  '.event == "timeout" and .agent == "codex" and .surface == "'"$SURFACE"'"' \
+  "$OUT"
+DATE_STATE=""
+DATE_STEP=""
+
+write_empty_store codex
+TARGET="codex-$CODEX_SESSION"
+MODE="stop"
+RESOLVE_SECS=""
+DATE_STATE="$TMP/date-state"
+DATE_STEP="31"
+printf '1000\n' > "$DATE_STATE"
+(
+  sleep 0.1
+  write_codex_store "$SURFACE" "$CODEX_SESSION"
+) &
+writer_pid=$!
+run_watch codex "$SURFACE" 100 90
 wait "$writer_pid"
 assert_eq "Codex default resolve follows a session registered after the old 30s window" "0" "$RC"
 assert_jq "Codex delayed registration reports the replayed Stop event" \
