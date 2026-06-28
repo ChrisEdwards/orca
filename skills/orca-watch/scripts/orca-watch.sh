@@ -50,14 +50,26 @@ store="$HOME/.cmuxterm/${agent}-hook-sessions.json"
 
 # Resolve surface UUID -> sessionId via the store, retrying because the hook may
 # still be landing for a freshly spawned worker. Claude registers by ready-time,
-# but Codex can take many seconds longer to associate its surface, so the window
-# is generous (override with ORCA_WATCH_RESOLVE_SECS). Resolving late is safe:
-# the event subscription uses --after, so a Stop that fired during resolution is
-# replayed rather than lost.
-resolve_secs=${ORCA_WATCH_RESOLVE_SECS:-30}
+# but Codex commonly writes its surface mapping only at first Stop. When Codex has
+# no explicit resolve override, treat resolution as part of the watch itself.
+if [[ -n "${ORCA_WATCH_RESOLVE_SECS:-}" ]]; then
+  resolve_secs=$ORCA_WATCH_RESOLVE_SECS
+  resolve_unbounded=0
+elif [[ "$agent" == codex ]]; then
+  resolve_secs=$timeout
+  resolve_unbounded=$(( timeout == 0 ? 1 : 0 ))
+else
+  resolve_secs=30
+  resolve_unbounded=0
+fi
 [[ "$resolve_secs" =~ ^[0-9]+$ ]] || die "ORCA_WATCH_RESOLVE_SECS must be a non-negative integer, got: $resolve_secs"
 session=""
-resolve_deadline=$(( $(date +%s) + resolve_secs ))
+start_ts=$(date +%s)
+resolve_deadline=$(( start_ts + resolve_secs ))
+timeout_deadline=0
+resolve_uses_timeout=0
+[[ "$agent" == codex ]] && resolve_uses_timeout=1
+(( timeout > 0 )) && timeout_deadline=$(( start_ts + timeout ))
 while :; do
   session=$(python3 - "$store" "$surface" <<'PY'
 import json, sys
@@ -83,7 +95,12 @@ for sid, rec in (data.get("sessions") or {}).items():
 PY
 )
   [[ -n "$session" ]] && break
-  (( $(date +%s) >= resolve_deadline )) && break
+  now=$(date +%s)
+  if (( resolve_uses_timeout == 1 && timeout_deadline > 0 && now >= timeout_deadline )); then
+    printf '{"event":"timeout","surface":"%s","agent":"%s"}\n' "$surface" "$agent"
+    exit 3
+  fi
+  (( resolve_unbounded == 0 && now >= resolve_deadline )) && break
   sleep 0.5
 done
 [[ -n "$session" ]] || die "could not resolve a session for surface $surface in $store within ${resolve_secs}s (worker may not have started, or hooks are off)"

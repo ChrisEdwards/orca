@@ -47,7 +47,7 @@ Every step is the same fire-and-follow shape, composed from the primitives:
    - `event: turn_end` — the step finished. Read its handoff file and continue.
    - `event: attention` — the worker is waiting on a permission, question, or notification. Flip the human to that tab, or use `orca-msg` to answer or nudge, then watch again.
    - `event: timeout` — the step is taking longer than expected. Tell the human and decide whether to keep waiting (watch again) or intervene.
-   - For **codex** steps spawning into a cold repo, the worker can register its surface later than the default 30s resolve window (mode cycle + trust prompt + brief submission delay first-event time). Set `ORCA_WATCH_RESOLVE_SECS=90` for those follows. If watch still exits 2 on resolve, the Stop may already be buffered — re-run watch with the **same `--after`** and it replays the missed `turn_end` rather than losing it.
+   - For **codex** steps, surface-to-session registration may not appear until the worker's first lifecycle hook. Leave `ORCA_WATCH_RESOLVE_SECS` unset so `orca-watch` treats resolution as part of the overall `--timeout`; the same `--after` anchor replays a buffered Stop if the worker finished while resolution was pending.
 4. **Read the handoff.** Pull the step's result from `handoff_dir` and use it to build the next brief.
 
 Each step gets a fresh worker. Context flows through handoff files and the branch, not through worker memory. Use `orca-msg` only to unstick a worker that paused, not to hand it the next step.
@@ -78,6 +78,8 @@ Track each worker's reported `surface`, `workspace`, and `workspace_created` val
 - If `workspace_created=false`, including the calling workspace, the workspace existed before this workflow. Close only worker surfaces you opened with `cmux close-surface --surface <surface-uuid>`. Never close a pre-existing workspace; it may hold the human's own tabs.
 
 If several workers share one orca-created workspace, only the first reports `workspace_created=true` and the rest report `false`; closing that one workspace also disposes of every sibling worker surface it holds, so a single `close-workspace` is enough and the order does not matter.
+
+Before declaring cleanup complete, verify tracked worker surfaces against an all-window inventory from the Orca cmux seam's `list-all-surfaces-json` command. Do not rely on pane-scoped `list`, because a human may have moved worker tabs into another pane during the run.
 
 Leave a worker tab or workspace open if its step failed or paused, so the human can inspect it. Never close the controller/orchestrator surface. The handoff dir under `${TMPDIR}` is disposable and may be left for inspection.
 

@@ -32,9 +32,22 @@ mkdir -p "$FAKE_DIR" "$HOME_DIR/.cmuxterm" "$PATH_DIR"
 PYTHON3=$(python3 -c 'import sys; print(sys.executable)')
 DATE_BIN=$(command -v date)
 BASH_BIN=$(command -v bash)
+SLEEP_BIN=$(command -v sleep)
 ln -s "$PYTHON3" "$PATH_DIR/python3"
-ln -s "$DATE_BIN" "$PATH_DIR/date"
 ln -s "$BASH_BIN" "$PATH_DIR/bash"
+ln -s "$SLEEP_BIN" "$PATH_DIR/sleep"
+cat > "$PATH_DIR/date" <<EOF
+#!/bin/bash
+if [[ "\${1:-}" == "+%s" && -n "\${FAKE_DATE_STATE:-}" ]]; then
+  current=\$(cat "\$FAKE_DATE_STATE" 2>/dev/null || printf '%s' "\${FAKE_DATE_START:-1000}")
+  printf '%s\n' "\$current"
+  step=\${FAKE_DATE_STEP:-1}
+  printf '%s\n' "\$((current + step))" > "\$FAKE_DATE_STATE"
+else
+  exec "$DATE_BIN" "\$@"
+fi
+EOF
+chmod +x "$PATH_DIR/date"
 
 cat > "$FAKE" <<'EOF'
 #!/bin/bash
@@ -177,12 +190,20 @@ write_codex_store() {
 EOF
 }
 
+write_empty_store() {
+  local agent="$1"
+  reset_store
+  printf '{"sessions": {}, "activeSessionsBySurface": {}}\n' > "$HOME_DIR/.cmuxterm/${agent}-hook-sessions.json"
+}
+
 OUT=""
 ERR=""
 RC=0
 MODE="stop"
 TARGET=""
 RESOLVE_SECS=""
+DATE_STATE=""
+DATE_STEP=""
 run_watch() {
   local agent="$1" surface="$2" timeout="$3" after="${4:-}"
   local errfile="$TMP/stderr"
@@ -195,6 +216,7 @@ run_watch() {
   OUT=$(HOME="$HOME_DIR" PATH="$PATH_DIR" CMUX_BIN="$FAKE" \
     FAKE_CALLS="$CALLS" FAKE_TARGET="$TARGET" FAKE_MODE="$MODE" \
     ORCA_WATCH_RESOLVE_SECS="$RESOLVE_SECS" \
+    FAKE_DATE_STATE="$DATE_STATE" FAKE_DATE_STEP="$DATE_STEP" \
     "$WATCH" "${args[@]}" 2>"$errfile")
   RC=$?
   ERR=$(cat "$errfile")
@@ -279,6 +301,48 @@ RESOLVE_SECS="0"
 run_watch claude "$SURFACE" 5
 assert_eq "malformed store exits with code 2" "2" "$RC"
 assert_contains "malformed store reports unresolved surface" "could not resolve a session for surface $SURFACE" "$ERR"
+
+write_empty_store codex
+TARGET="codex-$CODEX_SESSION"
+MODE="stop"
+RESOLVE_SECS="2"
+run_watch codex "$SURFACE" 1
+assert_eq "Codex unresolved session is bounded by the overall timeout" "3" "$RC"
+assert_jq "Codex unresolved session reports timeout JSON" \
+  '.event == "timeout" and .agent == "codex" and .surface == "'"$SURFACE"'"' \
+  "$OUT"
+assert_eq "Codex unresolved timeout does not subscribe before resolving a session" "" "$(cat "$CALLS")"
+
+write_empty_store codex
+TARGET="codex-$CODEX_SESSION"
+MODE="stop"
+RESOLVE_SECS=""
+run_watch codex "$SURFACE" 1 90
+assert_eq "Codex default unresolved session is bounded by the overall timeout" "3" "$RC"
+assert_jq "Codex default unresolved session reports timeout JSON" \
+  '.event == "timeout" and .agent == "codex" and .surface == "'"$SURFACE"'"' \
+  "$OUT"
+
+write_empty_store codex
+TARGET="codex-$CODEX_SESSION"
+MODE="stop"
+RESOLVE_SECS=""
+DATE_STATE="$TMP/date-state"
+DATE_STEP="31"
+printf '1000\n' > "$DATE_STATE"
+(
+  sleep 0.1
+  write_codex_store "$SURFACE" "$CODEX_SESSION"
+) &
+writer_pid=$!
+run_watch codex "$SURFACE" 40 90
+wait "$writer_pid"
+assert_eq "Codex default resolve follows a session registered after the old 30s window" "0" "$RC"
+assert_jq "Codex delayed registration reports the replayed Stop event" \
+  '.event == "turn_end" and .agent == "codex" and .surface == "'"$SURFACE"'" and .session_id == "'"$TARGET"'" and .seq == 42' \
+  "$OUT"
+DATE_STATE=""
+DATE_STEP=""
 
 if ((FAIL > 0)); then
   printf '\n%d passed, %d failed\n' "$PASS" "$FAIL" >&2

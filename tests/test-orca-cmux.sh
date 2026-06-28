@@ -29,6 +29,9 @@ cat > "$FAKE" <<'EOF'
   printf 'CALL\n'
   for a in "$@"; do printf 'ARG\t%s\n' "$a"; done
 } >> "$CMUX_CALL_LOG"
+if [[ "${1:-}" == "--id-format" ]]; then
+  shift 2
+fi
 case "$1" in
   new-surface)
     echo "OK surface:43 (${FAKE_SURFACE_UUID:-AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE}) pane:16 (PPPPPPPP-0000-0000-0000-000000000000) workspace:9 (WWWWWWWW-0000-0000-0000-000000000000)"
@@ -59,6 +62,51 @@ case "$1" in
       echo "* surface:35 5DE180A2-FEB8-4733-A750-2681FA2C2982  marker  [selected]"
     fi
     ;;
+  tree)
+    if [[ "${FAKE_TREE_EMPTY:-0}" == 1 ]]; then
+      printf '{"windows":[]}\n'
+      exit 0
+    fi
+    cat <<JSON
+{
+  "windows": [
+    {
+      "id": "$FAKE_WINDOW_UUID",
+      "ref": "window:1",
+      "workspaces": [
+        {
+          "id": "$FAKE_WORKSPACE_UUID",
+          "ref": "workspace:9",
+          "panes": [
+            {
+              "id": "PPPPPPPP-0000-0000-0000-000000000000",
+              "ref": "pane:16",
+              "surfaces": [
+                {
+                  "id": "$FAKE_SURFACE_UUID",
+                  "ref": "surface:43",
+                  "title": "worker"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+JSON
+    ;;
+  close-surface)
+    if [[ "${FAKE_CLOSE_NOT_FOUND:-0}" == 1 && "$*" != *"--workspace"* ]]; then
+      echo "not_found: Surface not found" >&2
+      exit 1
+    fi
+    if [[ "${FAKE_CLOSE_EMPTY:-0}" == 1 ]]; then
+      exit 0
+    fi
+    echo "OK"
+    ;;
   *)
     echo "OK surface:43 workspace:9"
     ;;
@@ -86,7 +134,29 @@ NEW_WS=F7AC8916-1937-479B-8602-3FB8423DBCD7
 # Run orca-cmux with the fake cmux wired in. Resets the call log first.
 orca() {
   : > "$CALL_LOG"
-  CMUX_BIN="$FAKE" CMUX_CALL_LOG="$CALL_LOG" FAKE_SURFACE_UUID="$SFC" FAKE_WORKSPACE_UUID="$NEW_WS" \
+  CMUX_BIN="$FAKE" CMUX_CALL_LOG="$CALL_LOG" FAKE_SURFACE_UUID="$SFC" \
+    FAKE_WORKSPACE_UUID="$NEW_WS" FAKE_WINDOW_UUID="$WIN" \
+    "$ORCA_CMUX" "$@"
+}
+
+orca_with_close_not_found() {
+  : > "$CALL_LOG"
+  CMUX_BIN="$FAKE" CMUX_CALL_LOG="$CALL_LOG" FAKE_SURFACE_UUID="$SFC" \
+    FAKE_WORKSPACE_UUID="$NEW_WS" FAKE_WINDOW_UUID="$WIN" FAKE_CLOSE_NOT_FOUND=1 \
+    "$ORCA_CMUX" "$@"
+}
+
+orca_with_unresolvable_close() {
+  : > "$CALL_LOG"
+  CMUX_BIN="$FAKE" CMUX_CALL_LOG="$CALL_LOG" FAKE_SURFACE_UUID="$SFC" \
+    FAKE_WORKSPACE_UUID="$NEW_WS" FAKE_WINDOW_UUID="$WIN" FAKE_CLOSE_NOT_FOUND=1 \
+    FAKE_TREE_EMPTY=1 "$ORCA_CMUX" "$@"
+}
+
+orca_with_empty_close() {
+  : > "$CALL_LOG"
+  CMUX_BIN="$FAKE" CMUX_CALL_LOG="$CALL_LOG" FAKE_SURFACE_UUID="$SFC" \
+    FAKE_WORKSPACE_UUID="$NEW_WS" FAKE_WINDOW_UUID="$WIN" FAKE_CLOSE_EMPTY=1 \
     "$ORCA_CMUX" "$@"
 }
 
@@ -208,6 +278,29 @@ orca close --surface "$SFC" >/dev/null
 assert_args "close emits close-surface command" \
   close-surface --surface "$SFC"
 
+if close_empty_out=$(orca_with_empty_close close --surface "$SFC"); then
+  pass
+else
+  fail "close succeeds when cmux returns empty stdout"
+fi
+assert_eq "close with empty cmux stdout prints nothing" "" "$close_empty_out"
+
+orca_with_close_not_found close --surface "$SFC" >/dev/null
+assert_eq "close retries with resolved all-tree workspace context" \
+  "$(printf '%s\n' \
+    close-surface --surface "$SFC" \
+    --id-format both tree --all --json \
+    close-surface --surface "$SFC" --workspace "$NEW_WS" --window "$WIN")" \
+  "$(recorded_args)"
+
+if orca_with_unresolvable_close close --surface "$SFC" 2>"$TMP/close.err"; then
+  fail "unresolvable close retry must fail"
+else
+  pass
+fi
+assert_eq "unresolvable close retry preserves the original close error" \
+  "not_found: Surface not found" "$(cat "$TMP/close.err")"
+
 # close-workspace maps to close-workspace, addressed by UUID.
 orca close-workspace --workspace "$WS" >/dev/null
 assert_args "close-workspace emits close-workspace command" \
@@ -217,6 +310,11 @@ assert_args "close-workspace emits close-workspace command" \
 orca list >/dev/null
 assert_args "list emits list-pane-surfaces command" \
   list-pane-surfaces --id-format both
+
+# list-all-surfaces-json maps to an all-window tree inventory for cleanup.
+orca list-all-surfaces-json >/dev/null
+assert_args "list-all-surfaces-json emits all-tree JSON command" \
+  --id-format both tree --all --json
 
 # identify-json maps to cmux's caller identity command.
 orca identify-json >/dev/null

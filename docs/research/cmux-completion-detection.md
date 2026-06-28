@@ -125,12 +125,12 @@ and Claude. The pr-tools branch/PR steps stay dry by design (not run against a
 real remote).
 
 One finding from the run: Codex registered its surface in
-`codex-hook-sessions.json` later than the default 30s `ORCA_WATCH_RESOLVE_SECS`
-window (fresh repo + mode cycle + brief submission pushed first-event time out),
-so the first `orca-watch` exited 2 on resolve. Re-running with the same `--after`
-resolved immediately and replayed the buffered Stop — confirming the "resolving
-late is safe" design. Mitigation: raise `ORCA_WATCH_RESOLVE_SECS` for Codex steps
-spawning into cold repos (the review step used 90s).
+`codex-hook-sessions.json` later than the original 30s resolve window (fresh repo
++ mode cycle + brief submission pushed first-event time out), so the first
+`orca-watch` exited 2 on resolve. Re-running with the same `--after` resolved
+immediately and replayed the buffered Stop — confirming the "resolving late is
+safe" design. Current mitigation: leave `ORCA_WATCH_RESOLVE_SECS` unset for
+Codex follows so resolution lasts until the overall `--timeout`.
 
 Slice 4 extraction (orca-o3b), re-verified live: the generic machinery moved into
 a new `orca-workflow` skill and `orca-ship` became a thin workflow that defers to

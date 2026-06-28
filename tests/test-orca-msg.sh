@@ -120,6 +120,14 @@ JSON
             printf 'Should I continue with the next step? Want me to continue?\n'
             printf '  ? for shortcuts                                   ← for agents\n'
             ;;
+          claude-ready-permission-question)
+            printf 'Do you have permission to access the repo? I could not clone it.\n'
+            printf '  ? for shortcuts                                   ← for agents\n'
+            ;;
+          claude-ready-permission-retry)
+            printf 'I do not have permission to write there. Should I retry?\n'
+            printf '  ? for shortcuts                                   ← for agents\n'
+            ;;
           claude-busy)
             printf '  ? for shortcuts                                   ← for agents\n'
             printf 'Running command: bash tests/test-orca-msg.sh\n'
@@ -393,6 +401,26 @@ ok  "ready question prose: status=ok"    eq "$(field status)" ok
 ok  "ready question prose: sends message" \
       calls_have_line $'send\t--surface\t'"$SFC_CLAUDE"$'\t'"$(with_footer "Continue after question prose.")"
 ok  "ready question prose: presses enter" \
+      calls_have_line $'send-key\t--surface\t'"$SFC_CLAUDE"$'\tenter'
+
+SCENARIO=claude-ready-permission-question
+msg_run --surface "$SFC_CLAUDE" --agent claude --message "Continue after permission question."
+
+ok  "ready permission question: exits 0"      rc_is 0
+ok  "ready permission question: status=ok"    eq "$(field status)" ok
+ok  "ready permission question: sends message" \
+      calls_have_line $'send\t--surface\t'"$SFC_CLAUDE"$'\t'"$(with_footer "Continue after permission question.")"
+ok  "ready permission question: presses enter" \
+      calls_have_line $'send-key\t--surface\t'"$SFC_CLAUDE"$'\tenter'
+
+SCENARIO=claude-ready-permission-retry
+msg_run --surface "$SFC_CLAUDE" --agent claude --message "Continue after permission retry."
+
+ok  "ready permission retry: exits 0"      rc_is 0
+ok  "ready permission retry: status=ok"    eq "$(field status)" ok
+ok  "ready permission retry: sends message" \
+      calls_have_line $'send\t--surface\t'"$SFC_CLAUDE"$'\t'"$(with_footer "Continue after permission retry.")"
+ok  "ready permission retry: presses enter" \
       calls_have_line $'send-key\t--surface\t'"$SFC_CLAUDE"$'\tenter'
 
 # === Busy, permission, and unknown UI states are refused ===================

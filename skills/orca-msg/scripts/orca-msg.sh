@@ -169,7 +169,11 @@ is_blocked_screen() {
   region=$(active_screen_region "$1")
   grep -qiE 'merge editor|resolve conflicts' <<<"$region" && return 0
   grep -qiE '(^|[[:space:]])[0-9]+[.)][[:space:]]*(yes|no|allow|deny|continue|quit|approve|reject)($|[^[:alpha:]])' <<<"$region" && return 0
-  grep -qiE '(do you trust|is this a project you trust|trust the contents|do you want to allow|allow( this)? (command|tool|tool execution)|permission (to|required|needed))[^?]{0,120}\?' <<<"$region"
+  if grep -qiE '(do you trust|is this a project you trust|trust the contents|do you want to allow|allow( this)? (command|tool|tool execution)|permission (to|required|needed))[^?]{0,120}\?' <<<"$region"; then
+    grep -qiE '(^|[[:space:]])[0-9]+[.)][[:space:]]*' <<<"$region"
+    return
+  fi
+  return 1
 }
 
 is_shell_prompt_screen() {

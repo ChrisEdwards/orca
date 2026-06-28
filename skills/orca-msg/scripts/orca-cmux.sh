@@ -22,6 +22,7 @@
 #   close       --surface <uuid>              close the surface
 #   close-workspace --workspace <uuid>        close the workspace and all its surfaces
 #   list                                      list surfaces (for debugging)
+#   list-all-surfaces-json                    list every surface in all windows
 #   identify-json                            print caller identity as JSON
 #   list-workspaces-json                      list workspaces in caller window as JSON
 #   list-surfaces-json --workspace <uuid>     list workspace surfaces as JSON
@@ -114,8 +115,33 @@ create_workspace() {
   printf '%s\n' "$uuid"
 }
 
+resolve_surface_context() {
+  local surface=$1
+  cmux_exec --id-format both tree --all --json 2>/dev/null | python3 -c '
+import json, sys
+
+target = sys.argv[1].lower()
+try:
+    data = json.load(sys.stdin)
+except Exception:
+    sys.exit(1)
+
+for window in data.get("windows") or []:
+    win = window.get("id") or ""
+    for workspace in window.get("workspaces") or []:
+        ws = workspace.get("id") or ""
+        for pane in workspace.get("panes") or []:
+            for surface in pane.get("surfaces") or []:
+                sid = str(surface.get("id") or "")
+                if sid.lower() == target and win and ws:
+                    print(f"{win}\t{ws}")
+                    sys.exit(0)
+sys.exit(1)
+' "$surface"
+}
+
 cmd=${1:-}
-[[ -n "$cmd" ]] || die "usage: orca-cmux <create-tab|create-workspace|send|send-key|read-screen|close|close-workspace|list|identify-json|list-workspaces-json|list-surfaces-json> [options]"
+[[ -n "$cmd" ]] || die "usage: orca-cmux <create-tab|create-workspace|send|send-key|read-screen|close|close-workspace|list|list-all-surfaces-json|identify-json|list-workspaces-json|list-surfaces-json> [options]"
 shift
 
 case "$cmd" in
@@ -192,7 +218,19 @@ case "$cmd" in
       esac
     done
     require_uuid surface "$sfc"
-    cmux_exec close-surface --surface "$sfc"
+    if close_out=$(cmux_exec close-surface --surface "$sfc" 2>&1); then
+      if [[ -n "$close_out" ]]; then
+        printf '%s\n' "$close_out"
+      fi
+    else
+      if context=$(resolve_surface_context "$sfc"); then
+        IFS=$'\t' read -r win ws <<<"$context"
+        cmux_exec close-surface --surface "$sfc" --workspace "$ws" --window "$win"
+      else
+        printf '%s\n' "$close_out" >&2
+        exit 1
+      fi
+    fi
     ;;
 
   close-workspace)
@@ -210,6 +248,11 @@ case "$cmd" in
   list)
     (($# == 0)) || die "list: takes no arguments"
     cmux_exec list-pane-surfaces --id-format both
+    ;;
+
+  list-all-surfaces-json)
+    (($# == 0)) || die "list-all-surfaces-json: takes no arguments"
+    cmux_exec --id-format both tree --all --json
     ;;
 
   identify-json)

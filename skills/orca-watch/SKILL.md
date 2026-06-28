@@ -45,5 +45,5 @@ Exit codes: `0` matched, `3` timeout (`{"event":"timeout"}`), `4` stream closed 
 ## Boundaries
 
 - Follows one worker. It does not spawn, message, or close a worker, and it does not act on the transition. The orchestrator decides what happens next.
-- Attribution is by session, not surface, because `agent.hook.*` frames carry `surface_id: null`. The surface-to-session bridge is the cmux session store. If the store has no session for the surface yet, the worker has not started or hooks are off; `orca-watch` fails loudly rather than guessing.
+- Attribution is by session, not surface, because `agent.hook.*` frames carry `surface_id: null`. The surface-to-session bridge is the cmux session store. Claude uses a short resolve window before failing loudly. Codex can register only at its first lifecycle hook, so with no `ORCA_WATCH_RESOLVE_SECS` override resolution is part of the overall `--timeout`.
 - Screen reading against the adapter `ready-marker` is the fallback when hook integration is disabled. See `docs/research/cmux-completion-detection.md`.
