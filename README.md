@@ -138,19 +138,17 @@ current directory. You can steer all three choices in plain language.
 
 - Say "spin up a Codex worker" or "use Claude" to pick the agent type. If you do
   not say, the orchestrator asks.
-- Name a workspace, such as "in the aiml-services workspace", to place the
-  worker in an existing tab group. Orca creates that workspace if it does not
-  exist yet.
+- Name a workspace, such as "in the backend workspace", to place the worker in
+  an existing tab group. Orca creates that workspace if it does not exist yet.
 - Point at a repo, such as "in ~/projects/api", to set the worker's working
   directory.
 
 ### Auto mode and permission prompts
 
-For Claude workers, Orca cycles the worker into auto mode after launch, where it
-runs allowlisted operations without asking. Enterprise policy forbids launching
-straight into auto mode, so Orca reaches it through a post-launch keystroke
-sequence instead. If a worker still hits a permission, trust, or question
-prompt, it pauses. When you are following that worker, the orchestrator reports
+For Claude workers, if the worker does not come up in auto mode, Orca puts it
+into auto mode after launch, where it runs allowlisted operations without
+asking. If a worker still hits a permission, trust, or question prompt, it
+pauses. When you are following that worker, the orchestrator reports
 attention-needed so you can flip to its tab or answer through `orca-msg`. Orca
 never answers permission or trust prompts for you.
 
