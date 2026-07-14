@@ -21,6 +21,69 @@ The plugin includes six skills:
 - `orca-ship` drives one change from a fresh branch through implementation,
   review-until-clean, and a draft PR across Claude Code and Codex workers.
 
+## Using Orca
+
+Once the plugin is installed (see below), you drive Orca by talking to the
+Claude Code or Codex session that has it loaded. That session becomes the
+**orchestrator**. You describe what you want in plain language, it picks the
+matching skill, opens a new cmux tab, and drives the worker there. You never
+call the bundled scripts yourself.
+
+Orca runs inside cmux, so you need `cmux`, `jq`, and the `claude` or `codex`
+CLI on your `PATH`. Each worker lands in its own tab in your current cmux
+workspace, so you can watch it work while you keep talking to the orchestrator.
+
+**Spin up a worker for one task** (`orca-spawn`)
+
+```text
+Use orca to spin up a Claude agent to add retry logic to the HTTP client
+in ~/projects/api, then run the tests.
+```
+
+The orchestrator opens a new tab, launches Claude Code, brings it to auto mode,
+hands it a self-contained brief built from your request, and confirms it came
+up. Ask for a Codex worker instead and it launches Codex.
+
+**Fork the current conversation** (`orca-fork`)
+
+```text
+Fork this conversation into a new tab so a copy can try the risky refactor
+while we keep talking here.
+```
+
+Unlike a spawn, a fork carries the full conversation history into the new tab
+instead of starting from a fresh brief.
+
+**Message a running worker** (`orca-msg`)
+
+```text
+Tell the Codex worker in the payments workspace to also bump the changelog.
+```
+
+You can name the target in plain language or paste a cmux surface, and the
+orchestrator resolves it to the right surface before delivering the message.
+
+**Follow a worker to completion** (`orca-watch`)
+
+```text
+Spin up a Claude agent to migrate the config loader, then watch it and ping me
+when it finishes or needs input.
+```
+
+The orchestrator parks on the cmux event stream instead of polling the screen,
+so it catches turn-end and attention-needed even for a fast worker.
+
+**Ship a change end to end** (`orca-ship`)
+
+```text
+Use orca to ship the rate-limiter fix as a reviewed draft PR.
+```
+
+This runs the whole pipeline across Claude and Codex workers, create a branch,
+implement, review until clean, fix any findings, then open a draft PR. For a
+custom multi-step pipeline, describe the steps and Orca runs them the same way
+through `orca-workflow`.
+
 ## Install In Codex
 
 Add this repository as a custom Codex plugin marketplace:
