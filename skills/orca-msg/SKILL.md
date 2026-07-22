@@ -20,7 +20,7 @@ Require these external CLIs on `PATH`:
 
 - **target surface** — either a pasted cmux copy-ids block containing `surface_id`, a stable surface UUID, or a surface descriptor such as "the Claude agent in the aiml-services workspace."
 - **message intent** — what the human wants the target agent to receive. This may be literal text or an instruction to assemble context from the current conversation, files, branch, or issue tracker.
-- **agent type** — optional. If the target says Claude or Codex, pass `--agent`. Otherwise let the script infer from the target screen.
+- **agent type** — optional hint. If the target says Claude or Codex, pass `--agent`. Otherwise let the script infer from the target screen. The live input prompt is authoritative and corrects a stale or mistaken hint.
 
 Use "surface" in Orca-level language. A cmux pane is only a layout container; the surface UUID is the target.
 

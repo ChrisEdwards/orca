@@ -437,8 +437,9 @@ for ((p = 0; p < ORCA_READY_POLLS; p++)); do
   if is_blocked_screen "$screen"; then
     die "target surface is not ready for a message; it appears to be blocked on a prompt"
   fi
-  if [[ -z "$AGENT" ]]; then
-    AGENT=$(infer_agent_from_screen "$screen")
+  detected_agent=$(infer_agent_from_screen "$screen")
+  if [[ -n "$detected_agent" ]]; then
+    AGENT=$detected_agent
   fi
   if [[ -z "$AGENT" ]]; then
     need_clarification "could not determine whether the target surface is Claude or Codex"

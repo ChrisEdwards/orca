@@ -49,6 +49,7 @@ document it as a prerequisite.
 - The test fakes for cmux can silently drift from the installed cmux's real output format (they kept emitting the old UUID-bearing `new-workspace` output), which let real spawn breakage pass CI. When a cmux output format matters to parsing, make the fake match the installed cmux, not a remembered format.
 - Orca cleanup must not rely only on the scoped `orca-cmux.sh list` output. If a user moves worker tabs into another pane, that list can miss live Orca surfaces; verify cleanup with an all-pane inventory such as `cmux tree --all` before declaring surfaces cleaned up.
 - In zsh, `$status` is a readonly special parameter; use names like `test_status` for captured exit codes in restoration or negative-test snippets.
+- Treat `orca-msg --agent` as a caller hint, not ground truth. Agent workers can mislabel a reply target; when a live Claude or Codex input prompt is detectable, its observed type must control readiness and reporting.
 
 <!-- br-agent-instructions-v1 -->
 

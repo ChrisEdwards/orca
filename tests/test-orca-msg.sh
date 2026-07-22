@@ -84,6 +84,14 @@ JSON
     case "$sfc" in
       "$FAKE_SFC_CLAUDE")
         case "${FAKE_SCENARIO:-}" in
+          claude-background-ready)
+            printf 'Bash(sh /tmp/poll-idle.sh)\n'
+            printf '  Running in the background (down arrow to manage)\n'
+            printf 'Poller is running; standing by for the Codex critique.\n'
+            printf 'Crunched for 1m 6s - 1 shell still running\n'
+            printf 'prompt>\n'
+            printf '  auto mode on - PR #165 - ← for agents\n'
+            ;;
           claude-blocked)
             printf 'Do you want to allow this command?\n'
             printf '1. Yes\n2. No\n'
@@ -336,6 +344,18 @@ ok  "codex infer: exits 0"              rc_is 0
 ok  "codex infer: agent=codex"          eq "$(field agent)" codex
 ok  "codex infer: sends message" \
       calls_have_line $'send\t--surface\t'"$SFC_CODEX"$'\t'"$(with_footer "Proceed with tests.")"
+
+# === Live prompt wins over a stale agent hint and background activity ======
+SCENARIO=claude-background-ready
+msg_run --surface "$SFC_CLAUDE" --agent codex --message "The critique is ready."
+
+ok  "background Claude with stale hint: exits 0" rc_is 0
+ok  "background Claude with stale hint: status=ok" eq "$(field status)" ok
+ok  "background Claude with stale hint: reports claude" eq "$(field agent)" claude
+ok  "background Claude with stale hint: sends message" \
+      calls_have_line $'send\t--surface\t'"$SFC_CLAUDE"$'\t'"$(with_footer "The critique is ready.")"
+ok  "background Claude with stale hint: presses enter" \
+      calls_have_line $'send-key\t--surface\t'"$SFC_CLAUDE"$'\tenter'
 
 # === Blocked states are refused, not answered ==============================
 SCENARIO=codex-blocked
